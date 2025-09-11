@@ -58,11 +58,11 @@ gh release create "$VERSION" \
   "${SCRIPT_NAME}-${VERSION}.tar.gz" \
   "${SCRIPT_NAME}-${VERSION}.zip" \
   "$SCRIPT_NAME" \
-  --title "🧪 ${SCRIPT_NAME} ${VERSION} (${PRERELEASE_TYPE})" \
+  --title "${SCRIPT_NAME} ${VERSION} (${PRERELEASE_TYPE})" \
   --notes "$RELEASE_NOTES" \
   --prerelease
 
 # Nettoyer
 rm "${SCRIPT_NAME}-${VERSION}.tar.gz" "${SCRIPT_NAME}-${VERSION}.zip"
 
-echo "✅ Pré-release créée: https://github.com/0xbbuddha/arch-shell/releases/tag/${VERSION}"
+echo "Pré-release créée: https://github.com/0xbbuddha/arch-shell/releases/tag/${VERSION}"

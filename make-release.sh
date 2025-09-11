@@ -68,4 +68,4 @@ gh release create "$VERSION" \
 echo "Nettoyage..."
 rm "${SCRIPT_NAME}-${VERSION}.tar.gz" "${SCRIPT_NAME}-${VERSION}.zip"
 
-echo "✅ Release créée: https://github.com/0xbbuddha/arch-shell/releases/tag/${VERSION}"
+echo "Release créée: https://github.com/0xbbuddha/arch-shell/releases/tag/${VERSION}"
