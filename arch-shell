@@ -35,7 +35,7 @@ spinner() {
 }
 
 usage() {
-    echo "Usage: $0 init | regen-base | create <env> | -S <env> <pkg...> | -R <env> <pkg...> | enter <env> | delete <env> | list | info <env> | export <env> <file> | import <file> <env> | run <env> <command> [options]"
+    echo "Usage: $0 init | regen-base | create <env> | -S <env> <pkg...> | -R <env> <pkg...> | enter <env> | delete <env> | list | info <env> | export <env> <file> | import <file> <env> | run <env> <command> [options] | clean <env> [options]"
     exit 1
 }
 
@@ -54,6 +54,29 @@ usage_run() {
     echo "  $0 run mon-env --script build.sh"
     echo "  $0 run mon-env --env DEBUG=1 \"./mon-programme\""
     echo "  $0 run mon-env --env BUILD_TYPE=release --script deploy.sh"
+    exit 1
+}
+
+usage_clean() {
+    echo "Usage: $0 clean <env> [options]"
+    echo ""
+    echo "Nettoie les fichiers temporaires et caches d'un environnement."
+    echo ""
+    echo "Options:"
+    echo "  --cache             Nettoyer seulement les caches pacman"
+    echo "  --logs              Nettoyer seulement les logs système"
+    echo "  --tmp               Nettoyer seulement les fichiers temporaires"
+    echo "  --all               Nettoyer tout (cache + logs + tmp)"
+    echo "  --dry-run           Afficher ce qui serait nettoyé sans le faire"
+    echo "  --all-envs          Nettoyer tous les environnements"
+    echo ""
+    echo "Exemples:"
+    echo "  $0 clean mon-env                    # Nettoyage standard (cache + tmp)"
+    echo "  $0 clean mon-env --all              # Nettoyage complet"
+    echo "  $0 clean mon-env --dry-run          # Aperçu du nettoyage"
+    echo "  $0 clean mon-env --cache            # Seulement les caches"
+    echo "  $0 clean --all-envs                 # Nettoyer tous les environnements"
+    echo "  $0 clean --all-envs --dry-run       # Aperçu pour tous les environnements"
     exit 1
 }
 
@@ -278,6 +301,168 @@ import_env() {
     rm -rf "$temp_dir"
     
     echo -e "${GREEN}[*] Import terminé : environnement ${envname} créé${NC}"
+}
+
+clean_env() {
+    local envname="$1"
+    local clean_cache=false
+    local clean_logs=false
+    local clean_tmp=false
+    local clean_all=false
+    local dry_run=false
+    local all_envs=false
+    
+    # Analyser les options
+    shift 1
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --cache)
+                clean_cache=true
+                shift
+                ;;
+            --logs)
+                clean_logs=true
+                shift
+                ;;
+            --tmp)
+                clean_tmp=true
+                shift
+                ;;
+            --all)
+                clean_all=true
+                shift
+                ;;
+            --dry-run)
+                dry_run=true
+                shift
+                ;;
+            --all-envs)
+                all_envs=true
+                shift
+                ;;
+            *)
+                echo -e "${RED}[!] Option inconnue : $1${NC}"
+                return 1
+                ;;
+        esac
+    done
+    
+    # Si aucune option spécifique, nettoyage standard
+    if [ "$clean_cache" = false ] && [ "$clean_logs" = false ] && [ "$clean_tmp" = false ] && [ "$clean_all" = false ]; then
+        clean_cache=true
+        clean_tmp=true
+    fi
+    
+    # Si --all, activer tout
+    if [ "$clean_all" = true ]; then
+        clean_cache=true
+        clean_logs=true
+        clean_tmp=true
+    fi
+    
+    # Fonction pour nettoyer un environnement spécifique
+    clean_single_env() {
+        local env="$1"
+        local envdir="${ARCHSHELL_DIR}/${env}"
+        
+        if [ ! -d "$envdir" ]; then
+            echo -e "${RED}[!] Environnement inexistant : ${env}${NC}"
+            return 1
+        fi
+        
+        echo -e "${BLUE}[*] Nettoyage de l'environnement ${env}...${NC}"
+        
+        local total_freed=0
+        local files_removed=0
+        
+        # Nettoyer le cache pacman
+        if [ "$clean_cache" = true ]; then
+            local cache_dir="${envdir}/var/cache/pacman/pkg"
+            if [ -d "$cache_dir" ]; then
+                local cache_size=$(sudo du -sb "$cache_dir" 2>/dev/null | awk '{print $1}' || echo "0")
+                local cache_files=$(sudo find "$cache_dir" -name "*.pkg.tar.*" 2>/dev/null | wc -l || echo "0")
+                
+                if [ "$dry_run" = true ]; then
+                    echo -e "${YELLOW}[DRY-RUN] Cache pacman : ${cache_files} fichiers ($(numfmt --to=iec $cache_size))${NC}"
+                else
+                    sudo find "$cache_dir" -name "*.pkg.tar.*" -delete 2>/dev/null
+                    echo -e "${GREEN}[✓] Cache pacman nettoyé : ${cache_files} fichiers ($(numfmt --to=iec $cache_size))${NC}"
+                    total_freed=$((total_freed + cache_size))
+                    files_removed=$((files_removed + cache_files))
+                fi
+            fi
+        fi
+        
+        # Nettoyer les logs
+        if [ "$clean_logs" = true ]; then
+            local log_dir="${envdir}/var/log"
+            if [ -d "$log_dir" ]; then
+                local log_size=$(sudo du -sb "$log_dir" 2>/dev/null | awk '{print $1}' || echo "0")
+                local log_files=$(sudo find "$log_dir" -type f -name "*.log*" 2>/dev/null | wc -l || echo "0")
+                
+                if [ "$dry_run" = true ]; then
+                    echo -e "${YELLOW}[DRY-RUN] Logs système : ${log_files} fichiers ($(numfmt --to=iec $log_size))${NC}"
+                else
+                    sudo find "$log_dir" -type f -name "*.log*" -delete 2>/dev/null
+                    sudo find "$log_dir" -type f -name "*.old" -delete 2>/dev/null
+                    echo -e "${GREEN}[✓] Logs nettoyés : ${log_files} fichiers ($(numfmt --to=iec $log_size))${NC}"
+                    total_freed=$((total_freed + log_size))
+                    files_removed=$((files_removed + log_files))
+                fi
+            fi
+        fi
+        
+        # Nettoyer les fichiers temporaires
+        if [ "$clean_tmp" = true ]; then
+            local tmp_dir="${envdir}/tmp"
+            if [ -d "$tmp_dir" ]; then
+                local tmp_size=$(sudo du -sb "$tmp_dir" 2>/dev/null | awk '{print $1}' || echo "0")
+                local tmp_files=$(sudo find "$tmp_dir" -type f 2>/dev/null | wc -l || echo "0")
+                
+                if [ "$dry_run" = true ]; then
+                    echo -e "${YELLOW}[DRY-RUN] Fichiers temporaires : ${tmp_files} fichiers ($(numfmt --to=iec $tmp_size))${NC}"
+                else
+                    sudo find "$tmp_dir" -type f -delete 2>/dev/null
+                    echo -e "${GREEN}[✓] Temporaires nettoyés : ${tmp_files} fichiers ($(numfmt --to=iec $tmp_size))${NC}"
+                    total_freed=$((total_freed + tmp_size))
+                    files_removed=$((files_removed + tmp_files))
+                fi
+            fi
+        fi
+        
+        # Résumé pour cet environnement
+        if [ "$dry_run" = false ] && [ $total_freed -gt 0 ]; then
+            echo -e "${GREEN}[*] Environnement ${env} : ${files_removed} fichiers supprimés, $(numfmt --to=iec $total_freed) libérés${NC}"
+            update_last_used "$env"
+        fi
+    }
+    
+    # Nettoyer tous les environnements ou un seul
+    if [ "$all_envs" = true ]; then
+        echo -e "${BLUE}[*] Nettoyage de tous les environnements...${NC}"
+        local env_count=0
+        for env_path in "$ARCHSHELL_DIR"/*; do
+            [ -d "$env_path" ] || continue
+            local env_basename=$(basename "$env_path")
+            [ "$env_basename" = "store" ] && continue
+            [ -f "$env_path/.arch-shell-env" ] || continue
+            
+            clean_single_env "$env_basename"
+            env_count=$((env_count + 1))
+        done
+        
+        if [ $env_count -eq 0 ]; then
+            echo -e "${YELLOW}[!] Aucun environnement trouvé à nettoyer${NC}"
+        else
+            echo -e "${GREEN}[*] Nettoyage terminé pour ${env_count} environnement(s)${NC}"
+        fi
+    else
+        if [ -z "$envname" ]; then
+            echo -e "${RED}[!] Nom d'environnement requis ou utilisez --all-envs${NC}"
+            return 1
+        fi
+        clean_single_env "$envname"
+    fi
 }
 
 run_command() {
@@ -572,6 +757,23 @@ case "$1" in
     ENVNAME="$2"
     shift 2
     run_command "$ENVNAME" "$@"
+    ;;
+  clean)
+    if [ $# -lt 1 ]; then
+      usage_clean
+    fi
+    # Gérer le cas --all-envs sans nom d'environnement
+    if [ $# -ge 2 ] && [ "$2" = "--all-envs" ]; then
+      shift 1
+      clean_env "" "$@"
+    else
+      if [ $# -lt 2 ]; then
+        usage_clean
+      fi
+      ENVNAME="$2"
+      shift 2
+      clean_env "$ENVNAME" "$@"
+    fi
     ;;
   *)
     usage
