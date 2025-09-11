@@ -13,6 +13,10 @@ Thumbs.db
 *.tar.bz2
 *.zip
 
+# Backups
+*.bak
+*.old
+
 # Fichiers de développement
 .vscode/
 .idea/
