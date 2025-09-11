@@ -15,18 +15,15 @@ fi
 
 echo "🧪 Création de la pré-release $VERSION ($PRERELEASE_TYPE)"
 
-# Récupérer la dernière release pour les PRs
 echo "Récupération des PRs depuis la dernière release..."
 LAST_RELEASE=$(gh release list --limit 1 --exclude-pre-releases --json tagName --jq '.[0].tagName' 2>/dev/null || echo "")
 
 if [ -n "$LAST_RELEASE" ]; then
     echo "   Dernière release: $LAST_RELEASE"
     
-    # Récupérer la date de publication de la release (format ISO)
     RELEASE_DATE=$(gh release view $LAST_RELEASE --json publishedAt --jq '.publishedAt')
     
     if [ -n "$RELEASE_DATE" ]; then
-        # Récupérer tous les PRs mergés et filtrer par date
         PRS=$(gh pr list --state merged --json number,title,mergedAt | jq -r --arg date "$RELEASE_DATE" '
             map(select(.mergedAt > $date)) | 
             sort_by(.mergedAt) | 
@@ -43,12 +40,10 @@ else
     PRS=$(gh pr list --state merged --limit 10 --json number,title --jq '.[] | "- #\(.number): \(.title)"' 2>/dev/null || echo "")
 fi
 
-# Créer les archives
 echo "Création des archives..."
 tar -czf "${SCRIPT_NAME}-${VERSION}.tar.gz" "$SCRIPT_NAME"
 zip "${SCRIPT_NAME}-${VERSION}.zip" "$SCRIPT_NAME" >/dev/null 2>&1
 
-# Notes de release simples
 RELEASE_NOTES="**Pré-release $PRERELEASE_TYPE ${VERSION}**
 
 Version de test - Non recommandée pour la production"
@@ -68,7 +63,6 @@ curl -L -o arch-shell https://github.com/0xbbuddha/arch-shell/releases/download/
 sudo mv arch-shell /usr/local/bin/arch-shell && sudo chmod +x /usr/local/bin/arch-shell
 \`\`\`"
 
-# Créer la pré-release
 echo "Création de la pré-release GitHub..."
 gh release create "$VERSION" \
   "${SCRIPT_NAME}-${VERSION}.tar.gz" \
@@ -78,7 +72,6 @@ gh release create "$VERSION" \
   --notes "$RELEASE_NOTES" \
   --prerelease
 
-# Nettoyer
 rm "${SCRIPT_NAME}-${VERSION}.tar.gz" "${SCRIPT_NAME}-${VERSION}.zip"
 
 echo "Pré-release créée: https://github.com/0xbbuddha/arch-shell/releases/tag/${VERSION}"
