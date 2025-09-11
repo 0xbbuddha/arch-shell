@@ -17,10 +17,26 @@ LAST_RELEASE=$(gh release list --limit 1 --exclude-pre-releases --json tagName -
 
 if [ -n "$LAST_RELEASE" ] && [ "$LAST_RELEASE" != "$VERSION" ]; then
     echo "   Dernière release: $LAST_RELEASE"
-    PRS=$(gh pr list --state merged --search "merged:>=$(gh release view $LAST_RELEASE --json publishedAt --jq '.publishedAt' | cut -d'T' -f1)" --json number,title,url --jq '.[] | "- #\(.number): \(.title)"' 2>/dev/null || echo "")
+    
+    # Récupérer la date de publication de la release (format ISO)
+    RELEASE_DATE=$(gh release view $LAST_RELEASE --json publishedAt --jq '.publishedAt')
+    
+    if [ -n "$RELEASE_DATE" ]; then
+        # Récupérer tous les PRs mergés et filtrer par date
+        PRS=$(gh pr list --state merged --json number,title,mergedAt | jq -r --arg date "$RELEASE_DATE" '
+            map(select(.mergedAt > $date)) | 
+            sort_by(.mergedAt) | 
+            reverse | 
+            .[] | 
+            "- #\(.number): \(.title)"'
+        )
+    else
+        echo "   Impossible de récupérer la date de release"
+        PRS=""
+    fi
 else
     echo "   Aucune release précédente trouvée"
-    PRS=$(gh pr list --state merged --limit 10 --json number,title,url --jq '.[] | "- #\(.number): \(.title)"' 2>/dev/null || echo "")
+    PRS=$(gh pr list --state merged --limit 10 --json number,title --jq '.[] | "- #\(.number): \(.title)"' 2>/dev/null || echo "")
 fi
 
 # Créer les archives
