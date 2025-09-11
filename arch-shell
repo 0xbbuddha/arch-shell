@@ -90,7 +90,6 @@ remove_package() {
         if command -v jq >/dev/null 2>&1; then
             jq ".packages -= [\"$package\"]" "$infofile" > "${infofile}.tmp" && mv "${infofile}.tmp" "$infofile"
         else
-            # Utilisation de sed pour supprimer le paquet de la liste
             sed -i "s/\"$package\",\?//g; s/,\s*]/]/g; s/\[,/[/g" "$infofile"
         fi
     fi
@@ -200,7 +199,6 @@ case "$1" in
       echo "Environnement inexistant : ${ENVNAME}"; exit 3;
     fi
     
-    # Vérifier que tous les paquets sont présents dans l'environnement
     missing_packages=()
     for pkg in "$@"; do
       if ! check_package_in_env "$ENVNAME" "$pkg"; then

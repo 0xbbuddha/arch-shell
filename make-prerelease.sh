@@ -16,7 +16,7 @@ fi
 echo "🧪 Création de la pré-release $VERSION ($PRERELEASE_TYPE)"
 
 # Récupérer la dernière release pour les PRs
-echo "📋 Récupération des PRs depuis la dernière release..."
+echo "Récupération des PRs depuis la dernière release..."
 LAST_RELEASE=$(gh release list --limit 1 --exclude-pre-releases --json tagName --jq '.[0].tagName' 2>/dev/null || echo "")
 
 if [ -n "$LAST_RELEASE" ]; then
@@ -28,32 +28,32 @@ else
 fi
 
 # Créer les archives
-echo "📦 Création des archives..."
+echo "Création des archives..."
 tar -czf "${SCRIPT_NAME}-${VERSION}.tar.gz" "$SCRIPT_NAME"
 zip "${SCRIPT_NAME}-${VERSION}.zip" "$SCRIPT_NAME" >/dev/null 2>&1
 
 # Notes de release simples
-RELEASE_NOTES="🧪 **Pré-release $PRERELEASE_TYPE ${VERSION}**
+RELEASE_NOTES="**Pré-release $PRERELEASE_TYPE ${VERSION}**
 
-⚠️ Version de test - Non recommandée pour la production"
+Version de test - Non recommandée pour la production"
 
 if [ -n "$PRS" ]; then
     RELEASE_NOTES="$RELEASE_NOTES
 
-## 🔄 Pull Requests mergées
+## Pull Requests mergées
 $PRS"
 fi
 
 RELEASE_NOTES="$RELEASE_NOTES
 
-## 📦 Installation rapide
+## Installation rapide
 \`\`\`bash
 curl -L -o arch-shell https://github.com/0xbbuddha/arch-shell/releases/download/${VERSION}/arch-shell
 sudo mv arch-shell /usr/local/bin/arch-shell && sudo chmod +x /usr/local/bin/arch-shell
 \`\`\`"
 
 # Créer la pré-release
-echo "🚀 Création de la pré-release GitHub..."
+echo "Création de la pré-release GitHub..."
 gh release create "$VERSION" \
   "${SCRIPT_NAME}-${VERSION}.tar.gz" \
   "${SCRIPT_NAME}-${VERSION}.zip" \
