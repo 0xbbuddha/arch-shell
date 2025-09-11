@@ -35,7 +35,16 @@ spinner() {
 }
 
 usage() {
-    echo "Usage: $0 init | regen-base | create <env> | -S <env> <pkg...> | -R <env> <pkg...> | enter <env> | delete <env> | list | info <env> | export <env> <file> | import <file> <env>"
+    echo "Usage: $0 init | regen-base | create <env> | -S <env> <pkg...> | -R <env> <pkg...> | enter <env> | delete <env> | list | info <env> | export <env> <file> | import <file> <env> | run <env> <command> [options]"
+    echo ""
+    echo "Options pour 'run':"
+    echo "  --script <file>     Exécuter un script dans l'environnement"
+    echo "  --env <VAR=value>   Définir une variable d'environnement"
+    echo ""
+    echo "Exemples:"
+    echo "  $0 run mon-env \"ls -la\""
+    echo "  $0 run mon-env --script build.sh"
+    echo "  $0 run mon-env --env DEBUG=1 \"./mon-programme\""
     exit 1
 }
 
@@ -262,6 +271,97 @@ import_env() {
     echo -e "${GREEN}[*] Import terminé : environnement ${envname} créé${NC}"
 }
 
+run_command() {
+    local envname="$1"
+    local command=""
+    local script_file=""
+    local env_vars=""
+    
+    shift 1
+    
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --script)
+                script_file="$2"
+                shift 2
+                ;;
+            --env)
+                env_vars="$env_vars $2"
+                shift 2
+                ;;
+            *)
+                if [ -z "$command" ]; then
+                    command="$1"
+                else
+                    command="$command $1"
+                fi
+                shift
+                ;;
+        esac
+    done
+    
+    local envdir="${ARCHSHELL_DIR}/${envname}"
+    
+    if [ ! -d "$envdir" ]; then
+        echo -e "${RED}[!] Environnement inexistant : ${envname}${NC}"
+        return 1
+    fi
+    
+    update_last_used "$envname"
+    
+    if [ -n "$script_file" ]; then
+        if [ ! -f "$script_file" ]; then
+            echo -e "${RED}[!] Script inexistant : ${script_file}${NC}"
+            return 1
+        fi
+        
+        echo -e "${BLUE}[*] Exécution du script ${script_file} dans ${envname}...${NC}"
+        
+        local script_name=$(basename "$script_file")
+        sudo mkdir -p "${envdir}/root"
+        sudo cp "$script_file" "${envdir}/root/${script_name}"
+        sudo chmod +x "${envdir}/root/${script_name}"
+        
+        sudo arch-nspawn -c /var/cache/pacman/pkg "$envdir" /bin/bash -c "cd /root && ./${script_name}"
+        local exit_code=$?
+        
+        sudo rm -f "${envdir}/root/${script_name}"
+        
+        if [ $exit_code -eq 0 ]; then
+            echo -e "${GREEN}[*] Script exécuté avec succès${NC}"
+        else
+            echo -e "${RED}[!] Script terminé avec le code d'erreur ${exit_code}${NC}"
+        fi
+        
+        return $exit_code
+    else
+        if [ -z "$command" ]; then
+            echo -e "${RED}[!] Aucune commande spécifiée${NC}"
+            return 1
+        fi
+        
+        echo -e "${BLUE}[*] Exécution de '${command}' dans ${envname}...${NC}"
+        
+        if [ -n "$env_vars" ]; then
+            # Avec variables d'environnement
+            sudo arch-nspawn -c /var/cache/pacman/pkg "$envdir" /bin/bash -c "export $env_vars >/dev/null 2>&1; $command"
+        else
+            # Sans variables d'environnement
+            sudo arch-nspawn -c /var/cache/pacman/pkg "$envdir" /bin/bash -c "$command"
+        fi
+        
+        local exit_code=$?
+        
+        if [ $exit_code -eq 0 ]; then
+            echo -e "${GREEN}[*] Commande exécutée avec succès${NC}"
+        else
+            echo -e "${RED}[!] Commande terminée avec le code d'erreur ${exit_code}${NC}"
+        fi
+        
+        return $exit_code
+    fi
+}
+
 if [ $# -lt 1 ]; then
     usage
 fi
@@ -455,6 +555,15 @@ case "$1" in
     IMPORT_FILE="$2"
     ENVNAME="$3"
     import_env "$IMPORT_FILE" "$ENVNAME"
+    ;;
+  run)
+    if [ $# -lt 2 ]; then
+      echo "Usage: $0 run <env> <command> [options]"
+      exit 1
+    fi
+    ENVNAME="$2"
+    shift 2
+    run_command "$ENVNAME" "$@"
     ;;
   *)
     usage
