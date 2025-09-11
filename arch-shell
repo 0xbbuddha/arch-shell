@@ -36,15 +36,24 @@ spinner() {
 
 usage() {
     echo "Usage: $0 init | regen-base | create <env> | -S <env> <pkg...> | -R <env> <pkg...> | enter <env> | delete <env> | list | info <env> | export <env> <file> | import <file> <env> | run <env> <command> [options]"
+    exit 1
+}
+
+usage_run() {
+    echo "Usage: $0 run <env> <command> [options]"
     echo ""
-    echo "Options pour 'run':"
+    echo "Exécute une commande ou un script dans un environnement."
+    echo ""
+    echo "Options:"
     echo "  --script <file>     Exécuter un script dans l'environnement"
     echo "  --env <VAR=value>   Définir une variable d'environnement"
     echo ""
     echo "Exemples:"
     echo "  $0 run mon-env \"ls -la\""
+    echo "  $0 run mon-env \"make clean && make\""
     echo "  $0 run mon-env --script build.sh"
     echo "  $0 run mon-env --env DEBUG=1 \"./mon-programme\""
+    echo "  $0 run mon-env --env BUILD_TYPE=release --script deploy.sh"
     exit 1
 }
 
@@ -558,8 +567,7 @@ case "$1" in
     ;;
   run)
     if [ $# -lt 2 ]; then
-      echo "Usage: $0 run <env> <command> [options]"
-      exit 1
+      usage_run
     fi
     ENVNAME="$2"
     shift 2
