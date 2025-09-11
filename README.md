@@ -1,6 +1,6 @@
 # 🏗️ Arch-Shell
 
-Un gestionnaire d'environnements Arch Linux isolés pour ArchimedeOS, permettant de créer et gérer facilement des environnements de développement ou de test séparés.
+Un gestionnaire d'environnements Arch Linux isolés, permettant de créer et gérer facilement des environnements de développement ou de test séparés.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Shell](https://img.shields.io/badge/Shell-Bash-green.svg)](https://www.gnu.org/software/bash/)
@@ -18,7 +18,7 @@ Arch-Shell est un outil de gestion d'environnements Arch Linux qui utilise `arch
 
 ## 🔧 Prérequis
 
-- Arch Linux ou dérivé (ArchimedeOS)
+- Arch Linux ou dérivé
 - `devtools` installé (`sudo pacman -S devtools`)
 - Privilèges sudo
 - `jq` (optionnel, pour un meilleur affichage des informations)
@@ -39,7 +39,7 @@ paru -S arch-shell
 
 ```bash
 # Cloner le dépôt
-git clone https://github.com/ArchimedeOS/arch-shell.git
+git clone https://github.com/killian-prin/arch-shell.git
 cd arch-shell
 
 # Copier le script dans /usr/local/bin
@@ -163,11 +163,11 @@ Ce projet est sous licence MIT. Voir le fichier [LICENSE](LICENSE) pour plus de 
 
 ## 👥 Auteurs
 
-- **Killian Prin-abeil** - *Développeur principal* - [killian@archimedeos.org](mailto:killian@archimedeos.org)
+- **Killian Prin-abeil** - *Développeur principal*
 
 ## 🐛 Rapporter un bug
 
-Si vous trouvez un bug, merci de [créer une issue](https://github.com/ArchimedeOS/arch-shell/issues/new) avec :
+Si vous trouvez un bug, merci de [créer une issue](https://github.com/killian-prin/arch-shell/issues/new) avec :
 
 - Description du problème
 - Étapes pour reproduire
@@ -180,7 +180,3 @@ Si vous trouvez un bug, merci de [créer une issue](https://github.com/Archimede
 - [ ] Interface graphique (GTK/Qt)
 - [ ] Import/export d'environnements
 - [ ] Intégration avec des gestionnaires de conteneurs
-
----
-
-**Note** : Ce projet fait partie de l'écosystème [ArchimedeOS](https://archimedeos.org).

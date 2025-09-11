@@ -2,7 +2,7 @@
 
 # =============================================
 # Script : arch-shell
-# Description : Gestion des environnements Arch Linux pour ArchimedeOS
+# Description : Gestion des environnements Arch Linux
 # Auteur : Killian Prin-abeil <killian@archimedeos.org>
 # Date : $(date +%Y-%m-%d)
 # =============================================

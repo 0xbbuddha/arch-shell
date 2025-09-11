@@ -1,14 +1,14 @@
 pkgbase = arch-shell
-    pkgdesc = Outil pour créer des environnements chroot Arch jetables, façon nix-shell, basé sur devtools.
-    pkgver = 1.0
-    pkgrel = 2
-    url = https://github.com/ArchimedeOS-Development/arch-shell
-    arch = any
-    license = GPL3
-    depends = devtools
-    depends = bash
-    provides = arch-shell
-    source = arch-shell
-    sha256sums = e87d09ba98853b781a94aa51597bebba83e5264595495183e153c9c3fd08e5f9
+	pkgdesc = Outil pour créer des environnements chroot Arch jetables, façon nix-shell, basé sur devtools.
+	pkgver = 0.1
+	pkgrel = 3
+	url = https://github.com/0xbbuddha/arch-shell
+	arch = any
+	license = GPL3
+	depends = devtools
+	depends = bash
+	provides = arch-shell
+	source = arch-shell
+	sha256sums = a5a80cf67d8119fc0ad856f70b946b22c443f13d18df75bab3f5be0b3c7cfb09
 
 pkgname = arch-shell
