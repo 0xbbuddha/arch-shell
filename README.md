@@ -37,13 +37,28 @@ paru -S arch-shell
 
 ### Installation manuelle
 
+#### Option 1 : Téléchargement direct du script
 ```bash
-# Cloner le dépôt
-git clone https://github.com/killian-prin/arch-shell.git
-cd arch-shell
+# Télécharger directement le script depuis la dernière release
+curl -L -o arch-shell https://github.com/0xbbuddha/arch-shell/releases/latest/download/arch-shell
+sudo mv arch-shell /usr/local/bin/arch-shell
+sudo chmod +x /usr/local/bin/arch-shell
+```
 
-# Copier le script dans /usr/local/bin
-sudo cp arch-shell.sh /usr/local/bin/arch-shell
+#### Option 2 : Archive complète
+```bash
+# Télécharger l'archive
+wget https://github.com/0xbbuddha/arch-shell/releases/latest/download/arch-shell-v0.1.3.tar.gz
+tar -xzf arch-shell-v0.1.3.tar.gz
+sudo cp arch-shell /usr/local/bin/arch-shell
+sudo chmod +x /usr/local/bin/arch-shell
+```
+
+#### Option 3 : Cloner le dépôt
+```bash
+git clone https://github.com/0xbbuddha/arch-shell.git
+cd arch-shell
+sudo cp arch-shell /usr/local/bin/arch-shell
 sudo chmod +x /usr/local/bin/arch-shell
 ```
 
@@ -167,12 +182,29 @@ Ce projet est sous licence MIT. Voir le fichier [LICENSE](LICENSE) pour plus de 
 
 ## 🐛 Rapporter un bug
 
-Si vous trouvez un bug, merci de [créer une issue](https://github.com/killian-prin/arch-shell/issues/new) avec :
+Si vous trouvez un bug, merci de [créer une issue](https://github.com/0xbbuddha/arch-shell/issues/new) avec :
 
 - Description du problème
 - Étapes pour reproduire
 - Système d'exploitation et version
 - Logs d'erreur (si applicable)
+
+## 🛠️ Développement
+
+### Scripts de release disponibles
+
+Ce projet inclut des scripts pour faciliter la création de releases :
+
+- **`make-release.sh`** : Crée une release stable avec récupération automatique des PRs
+- **`make-prerelease.sh`** : Crée une pré-release (alpha, beta, rc)
+
+```bash
+# Créer une release stable
+./make-release.sh v1.0.0
+
+# Créer une pré-release
+./make-prerelease.sh v1.0.0-rc.1 beta
+```
 
 ## 📈 Roadmap
 
