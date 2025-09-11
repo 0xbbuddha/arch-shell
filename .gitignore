@@ -1,0 +1,35 @@
+# Fichiers temporaires et de sauvegarde
+*~
+*.swp
+*.swo
+*.tmp
+.DS_Store
+Thumbs.db
+
+# Archives et logs
+*.log
+*.tar.gz
+*.tar.xz
+*.tar.bz2
+*.zip
+
+# Fichiers de développement
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Fichiers de build et cache
+pkg/
+src/
+*.pkg.tar.*
+makepkg.log
+namcap.log
+
+# Environnements arch-shell (pour tests locaux)
+.arch-shell/
+test-env/
+
+# Fichiers de configuration locale
+config.local
+.env.local
