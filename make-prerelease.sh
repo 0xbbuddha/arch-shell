@@ -17,68 +17,65 @@ echo "Création de la pré-release $VERSION ($PRERELEASE_TYPE)"
 
 categorize_prs() {
     local prs_data="$1"
+    local result=""
+    local categorized_prs=""
     
-    local feat_prs=$(echo "$prs_data" | grep -iE "^- #[0-9]+: .*(feat|feature|✨)" || true)
-    local fix_prs=$(echo "$prs_data" | grep -iE "^- #[0-9]+: .*(fix|bug|🐛)" || true)
-    local docs_prs=$(echo "$prs_data" | grep -iE "^- #[0-9]+: .*(docs|doc|📚)" || true)
-    local refactor_prs=$(echo "$prs_data" | grep -iE "^- #[0-9]+: .*(refactor|perf|improvement|🔧|⚡|🎨)" || true)
-    local ci_prs=$(echo "$prs_data" | grep -iE "^- #[0-9]+: .*(ci|build|chore|🏗️)" || true)
+    local feat_prs=$(echo "$prs_data" | grep -E "^- #[0-9]+: .*(feat|feature)" | grep -v "fix" || true)
+    if [ -n "$feat_prs" ]; then
+        result="$result
+
+### New Features
+$feat_prs"
+        categorized_prs="$categorized_prs$feat_prs"$'\n'
+    fi
     
-    local used_prs=""
-    [ -n "$feat_prs" ] && used_prs="$used_prs$feat_prs"$'\n'
-    [ -n "$fix_prs" ] && used_prs="$used_prs$fix_prs"$'\n'
-    [ -n "$docs_prs" ] && used_prs="$used_prs$docs_prs"$'\n'
-    [ -n "$refactor_prs" ] && used_prs="$used_prs$refactor_prs"$'\n'
-    [ -n "$ci_prs" ] && used_prs="$used_prs$ci_prs"$'\n'
+    local fix_prs=$(echo "$prs_data" | grep -E "^- #[0-9]+: .*(fix|bug)" || true)
+    if [ -n "$fix_prs" ]; then
+        result="$result
+
+### Bug Fixes
+$fix_prs"
+        categorized_prs="$categorized_prs$fix_prs"$'\n'
+    fi
+    
+    local docs_prs=$(echo "$prs_data" | grep -E "^- #[0-9]+: .*(docs|doc)" || true)
+    if [ -n "$docs_prs" ]; then
+        result="$result
+
+### Documentation
+$docs_prs"
+        categorized_prs="$categorized_prs$docs_prs"$'\n'
+    fi
+    
+    local refactor_prs=$(echo "$prs_data" | grep -E "^- #[0-9]+: .*(refactor|perf|improvement)" | grep -v -E "(feat|fix|docs)" || true)
+    if [ -n "$refactor_prs" ]; then
+        result="$result
+
+### Technical Improvements
+$refactor_prs"
+        categorized_prs="$categorized_prs$refactor_prs"$'\n'
+    fi
+    
+    local ci_prs=$(echo "$prs_data" | grep -E "^- #[0-9]+: .*(ci|build|chore)" || true)
+    if [ -n "$ci_prs" ]; then
+        result="$result
+
+### CI/CD & Build
+$ci_prs"
+        categorized_prs="$categorized_prs$ci_prs"$'\n'
+    fi
     
     local other_prs=""
     while IFS= read -r line; do
-        if [ -n "$line" ] && ! echo "$used_prs" | grep -qF "$line"; then
+        if [ -n "$line" ] && ! echo "$categorized_prs" | grep -Fq "$line"; then
             other_prs="$other_prs$line"$'\n'
         fi
     done <<< "$prs_data"
     
-    local result=""
-    
-    if [ -n "$feat_prs" ]; then
+    if [ -n "$other_prs" ] && [ "$other_prs" != $'\n' ]; then
         result="$result
 
-### ✨ New Features
-$feat_prs"
-    fi
-    
-    if [ -n "$fix_prs" ]; then
-        result="$result
-
-### 🐛 Bug Fixes
-$fix_prs"
-    fi
-    
-    if [ -n "$docs_prs" ]; then
-        result="$result
-
-### 📚 Documentation
-$docs_prs"
-    fi
-    
-    if [ -n "$refactor_prs" ]; then
-        result="$result
-
-### 🔧 Technical Improvements
-$refactor_prs"
-    fi
-    
-    if [ -n "$ci_prs" ]; then
-        result="$result
-
-### 🏗️ CI/CD & Build
-$ci_prs"
-    fi
-    
-    if [ -n "$other_prs" ]; then
-        result="$result
-
-### 🔄 Other Changes
+### Other Changes
 $other_prs"
     fi
     
@@ -122,7 +119,7 @@ if [ -n "$PRS" ]; then
     CATEGORIZED_PRS=$(categorize_prs "$PRS")
     RELEASE_NOTES="$RELEASE_NOTES
 
-## Changements$CATEGORIZED_PRS"
+## Changes$CATEGORIZED_PRS"
 fi
 
 RELEASE_NOTES="$RELEASE_NOTES
