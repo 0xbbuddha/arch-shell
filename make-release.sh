@@ -12,73 +12,52 @@ fi
 echo "Création de la release $VERSION"
 
 clean_emojis() {
-    echo "$1" | sed 's/[🎉🧪📋🔄📦🚀🧹✅✨🐛📚🔧🏗️🎨]//g'
+    echo "$1" | sed 's/[[:space:]]*[🎉🧪📋🔄📦🚀🧹✅✨🐛📚🔧🏗️🎨][[:space:]]*/ /g' | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//'
 }
 
 categorize_prs() {
     local prs_data="$1"
     local cleaned_prs=$(clean_emojis "$prs_data")
     local result=""
-    local used_lines=""
     
-    local feat_prs=$(echo "$cleaned_prs" | grep -E "^- #[0-9]+: .*(feat|feature)" | grep -v "fix" || true)
+    local feat_prs=$(echo "$cleaned_prs" | grep -E "(feat|feature)" | grep -v "fix" || true)
     if [ -n "$feat_prs" ]; then
         result="$result
 
 ### New Features
 $feat_prs"
-        used_lines="$used_lines$feat_prs"$'\n'
     fi
     
-    local fix_prs=$(echo "$cleaned_prs" | grep -E "^- #[0-9]+: .*(fix|bug)" || true)
+    local fix_prs=$(echo "$cleaned_prs" | grep -E "(fix|bug)" || true)
     if [ -n "$fix_prs" ]; then
         result="$result
 
 ### Bug Fixes
 $fix_prs"
-        used_lines="$used_lines$fix_prs"$'\n'
     fi
     
-    local docs_prs=$(echo "$cleaned_prs" | grep -E "^- #[0-9]+: .*(docs|doc)" || true)
+    local docs_prs=$(echo "$cleaned_prs" | grep -E "(docs|doc)" || true)
     if [ -n "$docs_prs" ]; then
         result="$result
 
 ### Documentation
 $docs_prs"
-        used_lines="$used_lines$docs_prs"$'\n'
     fi
     
-    local refactor_prs=$(echo "$cleaned_prs" | grep -E "^- #[0-9]+: .*(refactor|perf|improvement)" || true)
-    refactor_prs=$(echo "$refactor_prs" | grep -v -E "(feat|fix|docs)" || true)
+    local refactor_prs=$(echo "$cleaned_prs" | grep -E "(refactor|perf|improvement)" | grep -v -E "(feat|fix|docs)" || true)
     if [ -n "$refactor_prs" ]; then
         result="$result
 
 ### Technical Improvements
 $refactor_prs"
-        used_lines="$used_lines$refactor_prs"$'\n'
     fi
     
-    local ci_prs=$(echo "$cleaned_prs" | grep -E "^- #[0-9]+: .*(ci|build|chore)" || true)
+    local ci_prs=$(echo "$cleaned_prs" | grep -E "(ci|build|chore)" || true)
     if [ -n "$ci_prs" ]; then
         result="$result
 
 ### CI/CD & Build
 $ci_prs"
-        used_lines="$used_lines$ci_prs"$'\n'
-    fi
-    
-    local other_prs=""
-    while IFS= read -r line; do
-        if [ -n "$line" ] && ! echo "$used_lines" | grep -Fq "$line"; then
-            other_prs="$other_prs$line"$'\n'
-        fi
-    done <<< "$cleaned_prs"
-    
-    if [ -n "$other_prs" ] && [ "$other_prs" != $'\n' ]; then
-        result="$result
-
-### Other Changes
-$other_prs"
     fi
     
     echo "$result"
