@@ -11,6 +11,56 @@ fi
 
 echo "Création de la release $VERSION"
 
+categorize_prs() {
+    local prs_data="$1"
+    local feat_prs=$(echo "$prs_data" | grep -i "^- #[0-9]*: \(feat\|feature\|✨\)" || true)
+    local fix_prs=$(echo "$prs_data" | grep -i "^- #[0-9]*: \(fix\|bug\|🐛\)" || true)
+    local docs_prs=$(echo "$prs_data" | grep -i "^- #[0-9]*: \(docs\|doc\|📚\)" || true)
+    local refactor_prs=$(echo "$prs_data" | grep -i "^- #[0-9]*: \(refactor\|perf\|🔧\|⚡\)" || true)
+    local ci_prs=$(echo "$prs_data" | grep -i "^- #[0-9]*: \(ci\|build\|chore\|🏗️\)" || true)
+    local other_prs=$(echo "$prs_data" | grep -vi "^- #[0-9]*: \(feat\|feature\|fix\|bug\|docs\|doc\|refactor\|perf\|ci\|build\|chore\|✨\|🐛\|📚\|🔧\|⚡\|🏗️\)" || true)
+    
+    local result=""
+    
+    if [ -n "$feat_prs" ]; then
+        result="$result
+
+$feat_prs"
+    fi
+    
+    if [ -n "$fix_prs" ]; then
+        result="$result
+
+$fix_prs"
+    fi
+    
+    if [ -n "$docs_prs" ]; then
+        result="$result
+
+$docs_prs"
+    fi
+    
+    if [ -n "$refactor_prs" ]; then
+        result="$result
+
+$refactor_prs"
+    fi
+    
+    if [ -n "$ci_prs" ]; then
+        result="$result
+
+$ci_prs"
+    fi
+    
+    if [ -n "$other_prs" ]; then
+        result="$result
+
+$other_prs"
+    fi
+    
+    echo "$result"
+}
+
 echo "Récupération des PRs depuis la dernière release..."
 LAST_RELEASE=$(gh release list --limit 1 --exclude-pre-releases --json tagName --jq '.[0].tagName' 2>/dev/null || echo "")
 
@@ -45,10 +95,10 @@ RELEASE_NOTES="**Release ${VERSION}**
 Nouvelle version stable d'arch-shell."
 
 if [ -n "$PRS" ]; then
+    CATEGORIZED_PRS=$(categorize_prs "$PRS")
     RELEASE_NOTES="$RELEASE_NOTES
 
-## Pull Requests mergées
-$PRS"
+## Changements$CATEGORIZED_PRS"
 fi
 
 RELEASE_NOTES="$RELEASE_NOTES
