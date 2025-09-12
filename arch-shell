@@ -367,20 +367,17 @@ clean_env() {
         esac
     done
     
-    # Si aucune option spécifique, nettoyage standard
     if [ "$clean_cache" = false ] && [ "$clean_logs" = false ] && [ "$clean_tmp" = false ] && [ "$clean_all" = false ]; then
         clean_cache=true
         clean_tmp=true
     fi
     
-    # Si --all, activer tout
     if [ "$clean_all" = true ]; then
         clean_cache=true
         clean_logs=true
         clean_tmp=true
     fi
     
-    # Fonction pour nettoyer un environnement spécifique
     clean_single_env() {
         local env="$1"
         local envdir="${ARCHSHELL_DIR}/${env}"
@@ -395,7 +392,6 @@ clean_env() {
         local total_freed=0
         local files_removed=0
         
-        # Nettoyer le cache pacman
         if [ "$clean_cache" = true ]; then
             local cache_dir="${envdir}/var/cache/pacman/pkg"
             if [ -d "$cache_dir" ]; then
@@ -413,7 +409,6 @@ clean_env() {
             fi
         fi
         
-        # Nettoyer les logs
         if [ "$clean_logs" = true ]; then
             local log_dir="${envdir}/var/log"
             if [ -d "$log_dir" ]; then
@@ -432,7 +427,6 @@ clean_env() {
             fi
         fi
         
-        # Nettoyer les fichiers temporaires
         if [ "$clean_tmp" = true ]; then
             local tmp_dir="${envdir}/tmp"
             if [ -d "$tmp_dir" ]; then
@@ -450,14 +444,12 @@ clean_env() {
             fi
         fi
         
-        # Résumé pour cet environnement
         if [ "$dry_run" = false ] && [ $total_freed -gt 0 ]; then
             echo -e "${GREEN}[*] Environnement ${env} : ${files_removed} fichiers supprimés, $(numfmt --to=iec $total_freed) libérés${NC}"
             update_last_used "$env"
         fi
     }
     
-    # Nettoyer tous les environnements ou un seul
     if [ "$all_envs" = true ]; then
         echo -e "${BLUE}[*] Nettoyage de tous les environnements...${NC}"
         local env_count=0
@@ -557,10 +549,8 @@ run_command() {
         echo -e "${BLUE}[*] Exécution de '${command}' dans ${envname}...${NC}"
         
         if [ -n "$env_vars" ]; then
-            # Avec variables d'environnement
             sudo arch-nspawn -c /var/cache/pacman/pkg "$envdir" /bin/bash -c "export $env_vars >/dev/null 2>&1; $command"
         else
-            # Sans variables d'environnement
             sudo arch-nspawn -c /var/cache/pacman/pkg "$envdir" /bin/bash -c "$command"
         fi
         
@@ -576,10 +566,6 @@ run_command() {
     fi
 }
 
-# =============================================
-# Fonctions de gestion des snapshots
-# =============================================
-
 SNAPSHOTS_DIR="${ARCHSHELL_DIR}/snapshots"
 
 create_snapshot() {
@@ -588,23 +574,19 @@ create_snapshot() {
     local envdir="${ARCHSHELL_DIR}/${envname}"
     local env_snapshots_dir="${SNAPSHOTS_DIR}/${envname}"
     
-    # Vérifier que l'environnement existe
     if [ ! -d "$envdir" ]; then
         echo -e "${RED}[!] Environnement inexistant : ${envname}${NC}"
         exit 3
     fi
     
-    # Créer le répertoire des snapshots si nécessaire
     mkdir -p "$env_snapshots_dir"
     
-    # Générer un nom de snapshot si non fourni
     if [ -z "$snapshot_name" ]; then
         snapshot_name="$(date +%Y-%m-%d_%H-%M-%S)"
     fi
     
     local snapshot_file="${env_snapshots_dir}/${snapshot_name}.tar.xz"
     
-    # Vérifier que le snapshot n'existe pas déjà
     if [ -f "$snapshot_file" ]; then
         echo -e "${RED}[!] Le snapshot '${snapshot_name}' existe déjà${NC}"
         exit 4
@@ -612,19 +594,16 @@ create_snapshot() {
     
     echo -e "${BLUE}[*] Création du snapshot '${snapshot_name}' pour ${envname}...${NC}"
     
-    # Créer le snapshot avec compression
     (
         cd "${ARCHSHELL_DIR}" && \
         tar -cJf "$snapshot_file" "${envname}" 2>/dev/null
     ) &
     spinner $! "Création du snapshot"
     
-    # Mettre à jour les métadonnées
     local metadata_file="${env_snapshots_dir}/snapshots.json"
     local snapshot_size=$(du -h "$snapshot_file" | cut -f1)
     local snapshot_date=$(date -Iseconds)
     
-    # Créer ou mettre à jour le fichier de métadonnées
     if [ ! -f "$metadata_file" ]; then
         echo "[]" > "$metadata_file"
     fi
@@ -642,7 +621,6 @@ list_snapshots() {
     local envname="$1"
     local env_snapshots_dir="${SNAPSHOTS_DIR}/${envname}"
     
-    # Vérifier que l'environnement existe
     if [ ! -d "${ARCHSHELL_DIR}/${envname}" ]; then
         echo -e "${RED}[!] Environnement inexistant : ${envname}${NC}"
         exit 3
@@ -674,16 +652,13 @@ restore_snapshot() {
     local envdir="${ARCHSHELL_DIR}/${envname}"
     local env_snapshots_dir="${SNAPSHOTS_DIR}/${envname}"
     
-    # Vérifier que l'environnement existe
     if [ ! -d "$envdir" ]; then
         echo -e "${RED}[!] Environnement inexistant : ${envname}${NC}"
         exit 3
     fi
     
-    # Déterminer le fichier de snapshot
     local snapshot_file
     if [[ "$snapshot_name" =~ ^[0-9]+$ ]]; then
-        # Si c'est un numéro, trouver le Nième snapshot
         local i=1
         for file in "$env_snapshots_dir"/*.tar.xz; do
             if [ -f "$file" ] && [ "$i" -eq "$snapshot_name" ]; then
@@ -693,7 +668,6 @@ restore_snapshot() {
             ((i++))
         done
     else
-        # Sinon, utiliser le nom directement
         snapshot_file="${env_snapshots_dir}/${snapshot_name}.tar.xz"
     fi
     
@@ -712,11 +686,9 @@ restore_snapshot() {
     
     echo -e "${BLUE}[*] Restauration du snapshot pour ${envname}...${NC}"
     
-    # Sauvegarder l'environnement actuel (au cas où)
     local backup_name="backup-avant-restore-$(date +%Y%m%d%H%M%S)"
     mv "$envdir" "${envdir}.${backup_name}"
     
-    # Restaurer le snapshot
     (
         cd "${ARCHSHELL_DIR}" && \
         tar -xJf "$snapshot_file" 2>/dev/null
@@ -724,11 +696,9 @@ restore_snapshot() {
     spinner $! "Restauration du snapshot"
     
     if [ -d "$envdir" ]; then
-        # Supprimer la sauvegarde si la restauration a réussi
         sudo rm -rf "${envdir}.${backup_name}"
         echo -e "${GREEN}[*] Snapshot restauré avec succès${NC}"
     else
-        # Restaurer la sauvegarde si échec
         mv "${envdir}.${backup_name}" "$envdir"
         echo -e "${RED}[!] Échec de la restauration, environnement restauré${NC}"
         exit 6
@@ -741,7 +711,6 @@ delete_snapshot() {
     local env_snapshots_dir="${SNAPSHOTS_DIR}/${envname}"
     local snapshot_file="${env_snapshots_dir}/${snapshot_name}.tar.xz"
     
-    # Vérifier que l'environnement existe
     if [ ! -d "${ARCHSHELL_DIR}/${envname}" ]; then
         echo -e "${RED}[!] Environnement inexistant : ${envname}${NC}"
         exit 3
@@ -757,7 +726,6 @@ delete_snapshot() {
     if [[ $REPLY =~ ^[oOyY]$ ]]; then
         rm -f "$snapshot_file"
         
-        # Mettre à jour les métadonnées
         local metadata_file="${env_snapshots_dir}/snapshots.json"
         if [ -f "$metadata_file" ] && command -v jq >/dev/null 2>&1; then
             jq "map(select(.name != \"$snapshot_name\"))" "$metadata_file" > "${metadata_file}.tmp" && mv "${metadata_file}.tmp" "$metadata_file"
@@ -975,7 +943,6 @@ case "$1" in
     if [ $# -lt 1 ]; then
       usage_clean
     fi
-    # Gérer le cas --all-envs sans nom d'environnement
     if [ $# -ge 2 ] && [ "$2" = "--all-envs" ]; then
       shift 1
       clean_env "" "$@"
@@ -994,24 +961,20 @@ case "$1" in
     fi
     
     if [ $# -ge 3 ] && [ "$3" = "--list" ]; then
-      # arch-shell snapshot <env> --list
       list_snapshots "$2"
     elif [ $# -ge 3 ] && [ "$3" = "--restore" ]; then
-      # arch-shell snapshot <env> --restore <snapshot>
       if [ $# -lt 4 ]; then
         echo "Usage: $0 snapshot <env> --restore <snapshot>"
         exit 1
       fi
       restore_snapshot "$2" "$4"
     elif [ $# -ge 3 ] && [ "$3" = "--delete" ]; then
-      # arch-shell snapshot <env> --delete <snapshot>
       if [ $# -lt 4 ]; then
         echo "Usage: $0 snapshot <env> --delete <snapshot>"
         exit 1
       fi
       delete_snapshot "$2" "$4"
     else
-      # arch-shell snapshot <env> [nom]
       create_snapshot "$2" "${3:-}"
     fi
     ;;
