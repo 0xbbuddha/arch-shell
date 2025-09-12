@@ -35,7 +35,7 @@ spinner() {
 }
 
 usage() {
-    echo "Usage: $0 init | regen-base | create <env> | -S <env> <pkg...> | -R <env> <pkg...> | enter <env> | delete <env> | list | info <env> | export <env> <file> | import <file> <env> | run <env> <command> [options] | clean <env> [options]"
+    echo "Usage: $0 init | regen-base | create <env> | -S <env> <pkg...> | -R <env> <pkg...> | enter <env> | delete <env> | list | info <env> | export <env> <file> | import <file> <env> | run <env> <command> [options] | clean <env> [options] | snapshot <env> [options]"
     exit 1
 }
 
@@ -54,6 +54,26 @@ usage_run() {
     echo "  $0 run mon-env --script build.sh"
     echo "  $0 run mon-env --env DEBUG=1 \"./mon-programme\""
     echo "  $0 run mon-env --env BUILD_TYPE=release --script deploy.sh"
+    exit 1
+}
+
+usage_snapshot() {
+    echo "Usage: $0 snapshot <env> [nom] | $0 snapshot <env> <option>"
+    echo ""
+    echo "Gère les snapshots (sauvegardes) d'un environnement."
+    echo ""
+    echo "Options:"
+    echo "  --list              Lister tous les snapshots de l'environnement"
+    echo "  --restore <snap>    Restaurer un snapshot (par nom ou numéro)"
+    echo "  --delete <snap>     Supprimer un snapshot (par nom)"
+    echo ""
+    echo "Exemples:"
+    echo "  $0 snapshot mon-env                       # Créer un snapshot avec nom automatique"
+    echo "  $0 snapshot mon-env \"avant-test\"          # Créer un snapshot nommé"
+    echo "  $0 snapshot mon-env --list                # Lister les snapshots"
+    echo "  $0 snapshot mon-env --restore \"avant-test\"  # Restaurer par nom"
+    echo "  $0 snapshot mon-env --restore 1           # Restaurer par numéro"
+    echo "  $0 snapshot mon-env --delete \"avant-test\"   # Supprimer un snapshot"
     exit 1
 }
 
@@ -556,6 +576,199 @@ run_command() {
     fi
 }
 
+# =============================================
+# Fonctions de gestion des snapshots
+# =============================================
+
+SNAPSHOTS_DIR="${ARCHSHELL_DIR}/snapshots"
+
+create_snapshot() {
+    local envname="$1"
+    local snapshot_name="$2"
+    local envdir="${ARCHSHELL_DIR}/${envname}"
+    local env_snapshots_dir="${SNAPSHOTS_DIR}/${envname}"
+    
+    # Vérifier que l'environnement existe
+    if [ ! -d "$envdir" ]; then
+        echo -e "${RED}[!] Environnement inexistant : ${envname}${NC}"
+        exit 3
+    fi
+    
+    # Créer le répertoire des snapshots si nécessaire
+    mkdir -p "$env_snapshots_dir"
+    
+    # Générer un nom de snapshot si non fourni
+    if [ -z "$snapshot_name" ]; then
+        snapshot_name="$(date +%Y-%m-%d_%H-%M-%S)"
+    fi
+    
+    local snapshot_file="${env_snapshots_dir}/${snapshot_name}.tar.xz"
+    
+    # Vérifier que le snapshot n'existe pas déjà
+    if [ -f "$snapshot_file" ]; then
+        echo -e "${RED}[!] Le snapshot '${snapshot_name}' existe déjà${NC}"
+        exit 4
+    fi
+    
+    echo -e "${BLUE}[*] Création du snapshot '${snapshot_name}' pour ${envname}...${NC}"
+    
+    # Créer le snapshot avec compression
+    (
+        cd "${ARCHSHELL_DIR}" && \
+        tar -cJf "$snapshot_file" "${envname}" 2>/dev/null
+    ) &
+    spinner $! "Création du snapshot"
+    
+    # Mettre à jour les métadonnées
+    local metadata_file="${env_snapshots_dir}/snapshots.json"
+    local snapshot_size=$(du -h "$snapshot_file" | cut -f1)
+    local snapshot_date=$(date -Iseconds)
+    
+    # Créer ou mettre à jour le fichier de métadonnées
+    if [ ! -f "$metadata_file" ]; then
+        echo "[]" > "$metadata_file"
+    fi
+    
+    if command -v jq >/dev/null 2>&1; then
+        jq ". += [{\"name\": \"$snapshot_name\", \"date\": \"$snapshot_date\", \"size\": \"$snapshot_size\"}]" "$metadata_file" > "${metadata_file}.tmp" && mv "${metadata_file}.tmp" "$metadata_file"
+    else
+        echo "  {\"name\": \"$snapshot_name\", \"date\": \"$snapshot_date\", \"size\": \"$snapshot_size\"}" >> "$metadata_file.simple"
+    fi
+    
+    echo -e "${GREEN}[*] Snapshot '${snapshot_name}' créé (${snapshot_size})${NC}"
+}
+
+list_snapshots() {
+    local envname="$1"
+    local env_snapshots_dir="${SNAPSHOTS_DIR}/${envname}"
+    
+    # Vérifier que l'environnement existe
+    if [ ! -d "${ARCHSHELL_DIR}/${envname}" ]; then
+        echo -e "${RED}[!] Environnement inexistant : ${envname}${NC}"
+        exit 3
+    fi
+    
+    if [ ! -d "$env_snapshots_dir" ] || [ -z "$(ls -A "$env_snapshots_dir"/*.tar.xz 2>/dev/null)" ]; then
+        echo -e "${YELLOW}[*] Aucun snapshot trouvé pour l'environnement ${envname}${NC}"
+        return
+    fi
+    
+    echo -e "${BLUE}📸 Snapshots pour l'environnement '${envname}':${NC}"
+    
+    local i=1
+    for snapshot_file in "$env_snapshots_dir"/*.tar.xz; do
+        if [ -f "$snapshot_file" ]; then
+            local snapshot_name=$(basename "$snapshot_file" .tar.xz)
+            local snapshot_size=$(du -h "$snapshot_file" | cut -f1)
+            local snapshot_date=$(stat -c %y "$snapshot_file" | cut -d. -f1)
+            
+            echo -e "  ${GREEN}${i}.${NC} ${snapshot_name} - ${snapshot_size} (${snapshot_date})"
+            ((i++))
+        fi
+    done
+}
+
+restore_snapshot() {
+    local envname="$1"
+    local snapshot_name="$2"
+    local envdir="${ARCHSHELL_DIR}/${envname}"
+    local env_snapshots_dir="${SNAPSHOTS_DIR}/${envname}"
+    
+    # Vérifier que l'environnement existe
+    if [ ! -d "$envdir" ]; then
+        echo -e "${RED}[!] Environnement inexistant : ${envname}${NC}"
+        exit 3
+    fi
+    
+    # Déterminer le fichier de snapshot
+    local snapshot_file
+    if [[ "$snapshot_name" =~ ^[0-9]+$ ]]; then
+        # Si c'est un numéro, trouver le Nième snapshot
+        local i=1
+        for file in "$env_snapshots_dir"/*.tar.xz; do
+            if [ -f "$file" ] && [ "$i" -eq "$snapshot_name" ]; then
+                snapshot_file="$file"
+                break
+            fi
+            ((i++))
+        done
+    else
+        # Sinon, utiliser le nom directement
+        snapshot_file="${env_snapshots_dir}/${snapshot_name}.tar.xz"
+    fi
+    
+    if [ ! -f "$snapshot_file" ]; then
+        echo -e "${RED}[!] Snapshot '${snapshot_name}' introuvable${NC}"
+        exit 5
+    fi
+    
+    echo -e "${YELLOW}[!] ATTENTION: Cette opération va remplacer l'environnement actuel${NC}"
+    read -p "Continuer ? [o/N] " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[oOyY]$ ]]; then
+        echo "Annulé."
+        exit 0
+    fi
+    
+    echo -e "${BLUE}[*] Restauration du snapshot pour ${envname}...${NC}"
+    
+    # Sauvegarder l'environnement actuel (au cas où)
+    local backup_name="backup-avant-restore-$(date +%Y%m%d%H%M%S)"
+    mv "$envdir" "${envdir}.${backup_name}"
+    
+    # Restaurer le snapshot
+    (
+        cd "${ARCHSHELL_DIR}" && \
+        tar -xJf "$snapshot_file" 2>/dev/null
+    ) &
+    spinner $! "Restauration du snapshot"
+    
+    if [ -d "$envdir" ]; then
+        # Supprimer la sauvegarde si la restauration a réussi
+        sudo rm -rf "${envdir}.${backup_name}"
+        echo -e "${GREEN}[*] Snapshot restauré avec succès${NC}"
+    else
+        # Restaurer la sauvegarde si échec
+        mv "${envdir}.${backup_name}" "$envdir"
+        echo -e "${RED}[!] Échec de la restauration, environnement restauré${NC}"
+        exit 6
+    fi
+}
+
+delete_snapshot() {
+    local envname="$1"
+    local snapshot_name="$2"
+    local env_snapshots_dir="${SNAPSHOTS_DIR}/${envname}"
+    local snapshot_file="${env_snapshots_dir}/${snapshot_name}.tar.xz"
+    
+    # Vérifier que l'environnement existe
+    if [ ! -d "${ARCHSHELL_DIR}/${envname}" ]; then
+        echo -e "${RED}[!] Environnement inexistant : ${envname}${NC}"
+        exit 3
+    fi
+    
+    if [ ! -f "$snapshot_file" ]; then
+        echo -e "${RED}[!] Snapshot '${snapshot_name}' introuvable${NC}"
+        exit 5
+    fi
+    
+    read -p "Supprimer définitivement le snapshot '${snapshot_name}' ? [o/N] " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[oOyY]$ ]]; then
+        rm -f "$snapshot_file"
+        
+        # Mettre à jour les métadonnées
+        local metadata_file="${env_snapshots_dir}/snapshots.json"
+        if [ -f "$metadata_file" ] && command -v jq >/dev/null 2>&1; then
+            jq "map(select(.name != \"$snapshot_name\"))" "$metadata_file" > "${metadata_file}.tmp" && mv "${metadata_file}.tmp" "$metadata_file"
+        fi
+        
+        echo -e "${GREEN}[*] Snapshot '${snapshot_name}' supprimé${NC}"
+    else
+        echo "Annulé."
+    fi
+}
+
 if [ $# -lt 1 ]; then
     usage
 fi
@@ -773,6 +986,33 @@ case "$1" in
       ENVNAME="$2"
       shift 2
       clean_env "$ENVNAME" "$@"
+    fi
+    ;;
+  snapshot)
+    if [ $# -lt 2 ]; then
+      usage_snapshot
+    fi
+    
+    if [ $# -ge 3 ] && [ "$3" = "--list" ]; then
+      # arch-shell snapshot <env> --list
+      list_snapshots "$2"
+    elif [ $# -ge 3 ] && [ "$3" = "--restore" ]; then
+      # arch-shell snapshot <env> --restore <snapshot>
+      if [ $# -lt 4 ]; then
+        echo "Usage: $0 snapshot <env> --restore <snapshot>"
+        exit 1
+      fi
+      restore_snapshot "$2" "$4"
+    elif [ $# -ge 3 ] && [ "$3" = "--delete" ]; then
+      # arch-shell snapshot <env> --delete <snapshot>
+      if [ $# -lt 4 ]; then
+        echo "Usage: $0 snapshot <env> --delete <snapshot>"
+        exit 1
+      fi
+      delete_snapshot "$2" "$4"
+    else
+      # arch-shell snapshot <env> [nom]
+      create_snapshot "$2" "${3:-}"
     fi
     ;;
   *)
