@@ -18,48 +18,67 @@ echo "Création de la pré-release $VERSION ($PRERELEASE_TYPE)"
 categorize_prs() {
     local prs_data="$1"
     
-    local feat_prs=$(echo "$prs_data" | grep -i "^- #[0-9]*: \(feat\|feature\|✨\)" || true)
-    local fix_prs=$(echo "$prs_data" | grep -i "^- #[0-9]*: \(fix\|bug\|🐛\)" || true)
-    local docs_prs=$(echo "$prs_data" | grep -i "^- #[0-9]*: \(docs\|doc\|📚\)" || true)
-    local refactor_prs=$(echo "$prs_data" | grep -i "^- #[0-9]*: \(refactor\|perf\|🔧\|⚡\)" || true)
-    local ci_prs=$(echo "$prs_data" | grep -i "^- #[0-9]*: \(ci\|build\|chore\|🏗️\)" || true)
-    local other_prs=$(echo "$prs_data" | grep -vi "^- #[0-9]*: \(feat\|feature\|fix\|bug\|docs\|doc\|refactor\|perf\|ci\|build\|chore\|✨\|🐛\|📚\|🔧\|⚡\|🏗️\)" || true)
+    local feat_prs=$(echo "$prs_data" | grep -iE "^- #[0-9]+: .*(feat|feature|✨)" || true)
+    local fix_prs=$(echo "$prs_data" | grep -iE "^- #[0-9]+: .*(fix|bug|🐛)" || true)
+    local docs_prs=$(echo "$prs_data" | grep -iE "^- #[0-9]+: .*(docs|doc|📚)" || true)
+    local refactor_prs=$(echo "$prs_data" | grep -iE "^- #[0-9]+: .*(refactor|perf|improvement|🔧|⚡|🎨)" || true)
+    local ci_prs=$(echo "$prs_data" | grep -iE "^- #[0-9]+: .*(ci|build|chore|🏗️)" || true)
+    
+    local used_prs=""
+    [ -n "$feat_prs" ] && used_prs="$used_prs$feat_prs"$'\n'
+    [ -n "$fix_prs" ] && used_prs="$used_prs$fix_prs"$'\n'
+    [ -n "$docs_prs" ] && used_prs="$used_prs$docs_prs"$'\n'
+    [ -n "$refactor_prs" ] && used_prs="$used_prs$refactor_prs"$'\n'
+    [ -n "$ci_prs" ] && used_prs="$used_prs$ci_prs"$'\n'
+    
+    local other_prs=""
+    while IFS= read -r line; do
+        if [ -n "$line" ] && ! echo "$used_prs" | grep -qF "$line"; then
+            other_prs="$other_prs$line"$'\n'
+        fi
+    done <<< "$prs_data"
     
     local result=""
     
     if [ -n "$feat_prs" ]; then
         result="$result
 
+### ✨ New Features
 $feat_prs"
     fi
     
     if [ -n "$fix_prs" ]; then
         result="$result
 
+### 🐛 Bug Fixes
 $fix_prs"
     fi
     
     if [ -n "$docs_prs" ]; then
         result="$result
 
+### 📚 Documentation
 $docs_prs"
     fi
     
     if [ -n "$refactor_prs" ]; then
         result="$result
 
+### 🔧 Technical Improvements
 $refactor_prs"
     fi
     
     if [ -n "$ci_prs" ]; then
         result="$result
 
+### 🏗️ CI/CD & Build
 $ci_prs"
     fi
     
     if [ -n "$other_prs" ]; then
         result="$result
 
+### 🔄 Other Changes
 $other_prs"
     fi
     
