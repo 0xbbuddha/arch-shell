@@ -204,11 +204,3 @@ Ce projet inclut des scripts pour faciliter la création de releases :
 
 # Créer une pré-release
 ./make-prerelease.sh v1.0.0-rc.1 beta
-```
-
-## 📈 Roadmap
-
-- [ ] Support pour d'autres distributions basées sur Arch
-- [ ] Interface graphique (GTK/Qt)
-- [ ] Import/export d'environnements
-- [ ] Intégration avec des gestionnaires de conteneurs
