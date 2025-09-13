@@ -251,7 +251,6 @@ export_env() {
     
     echo -e "${BLUE}[*] Préparation de l'export de ${envname}...${NC}"
     
-    # Créer les métadonnées directement dans l'environnement
     cat > "${envdir}/.arch-shell-export-metadata.json" << EOF
 {
   "arch_shell_version": "$(grep -o 'v[0-9]\+\.[0-9]\+\.[0-9]\+' "$0" 2>/dev/null || echo 'unknown')",
@@ -267,14 +266,12 @@ EOF
     total_size=$(sudo du -sb "$envdir" | awk '{print $1}')
     echo -e "${BLUE}[*] Création de l'archive optimisée ($(numfmt --to=iec $total_size))...${NC}"
     
-    # Pipeline direct avec zstd (beaucoup plus rapide)
     (
         cd "$envdir"
         debug_run "sudo tar --zstd -cf '$export_file' ."
     ) &
     spinner $! "Compression directe avec zstd"
     
-    # Nettoyer le fichier de métadonnées temporaire
     rm -f "${envdir}/.arch-shell-export-metadata.json"
     
     local checksum
@@ -311,7 +308,6 @@ import_env() {
     
     echo -e "${BLUE}[*] Vérification et extraction de l'archive optimisée...${NC}"
     
-    # Test si c'est une archive zstd (nouveau format)
     if tar --zstd -tf "$import_file" >/dev/null 2>&1; then
         echo -e "${BLUE}[*] Archive zstd détectée (format optimisé)${NC}"
         
@@ -322,7 +318,6 @@ import_env() {
         ) &
         spinner $! "Extraction directe avec zstd"
         
-        # Afficher les métadonnées si disponibles
         if [ -f "${envdir}/.arch-shell-export-metadata.json" ] && command -v jq >/dev/null 2>&1; then
             echo -e "${BLUE}[*] Informations de l'archive :${NC}"
             echo -e "${BLUE}    Archive :${NC} $(jq -r '.export_date' "${envdir}/.arch-shell-export-metadata.json" 2>/dev/null || echo 'unknown')"
@@ -332,7 +327,6 @@ import_env() {
         fi
         
     else
-        # Fallback pour ancien format (gzip)
         echo -e "${BLUE}[*] Archive gzip détectée (ancien format)${NC}"
         
         if ! tar xzf "$import_file" -C "$temp_dir" 2>/dev/null; then
@@ -376,7 +370,6 @@ clean_env() {
     local dry_run=false
     local all_envs=false
     
-    # Analyser les options
     shift 1
     while [[ $# -gt 0 ]]; do
         case $1 in
@@ -629,7 +622,7 @@ create_snapshot() {
         snapshot_name="$(date +%Y-%m-%d_%H-%M-%S)"
     fi
     
-    local snapshot_file="${env_snapshots_dir}/${snapshot_name}.tar.xz"
+    local snapshot_file="${env_snapshots_dir}/${snapshot_name}.tar.zst"
     
     if [ -f "$snapshot_file" ]; then
         echo -e "${RED}[!] Le snapshot '${snapshot_name}' existe déjà${NC}"
@@ -640,7 +633,7 @@ create_snapshot() {
     
     (
         cd "${ARCHSHELL_DIR}" && \
-        tar -cJf "$snapshot_file" "${envname}" 2>/dev/null
+        debug_run "tar --zstd -cf '$snapshot_file' '${envname}'"
     ) &
     spinner $! "Création du snapshot"
     
@@ -670,7 +663,7 @@ list_snapshots() {
         exit 3
     fi
     
-    if [ ! -d "$env_snapshots_dir" ] || [ -z "$(ls -A "$env_snapshots_dir"/*.tar.xz 2>/dev/null)" ]; then
+    if [ ! -d "$env_snapshots_dir" ] || [ -z "$(ls -A "$env_snapshots_dir"/*.tar.{zst,xz} 2>/dev/null)" ]; then
         echo -e "${YELLOW}[*] Aucun snapshot trouvé pour l'environnement ${envname}${NC}"
         return
     fi
@@ -678,13 +671,20 @@ list_snapshots() {
     echo -e "${BLUE}📸 Snapshots pour l'environnement '${envname}':${NC}"
     
     local i=1
-    for snapshot_file in "$env_snapshots_dir"/*.tar.xz; do
+    for snapshot_file in "$env_snapshots_dir"/*.tar.{zst,xz}; do
         if [ -f "$snapshot_file" ]; then
-            local snapshot_name=$(basename "$snapshot_file" .tar.xz)
+            local snapshot_name=$(basename "$snapshot_file")
+            snapshot_name=${snapshot_name%.tar.*}
             local snapshot_size=$(du -h "$snapshot_file" | cut -f1)
             local snapshot_date=$(stat -c %y "$snapshot_file" | cut -d. -f1)
+            local format=""
+            if [[ "$snapshot_file" == *.tar.zst ]]; then
+                format=" (zstd)"
+            else
+                format=" (legacy xz)"
+            fi
             
-            echo -e "  ${GREEN}${i}.${NC} ${snapshot_name} - ${snapshot_size} (${snapshot_date})"
+            echo -e "  ${GREEN}${i}.${NC} ${snapshot_name} - ${snapshot_size} (${snapshot_date})${format}"
             ((i++))
         fi
     done
@@ -704,7 +704,7 @@ restore_snapshot() {
     local snapshot_file
     if [[ "$snapshot_name" =~ ^[0-9]+$ ]]; then
         local i=1
-        for file in "$env_snapshots_dir"/*.tar.xz; do
+        for file in "$env_snapshots_dir"/*.tar.{zst,xz}; do
             if [ -f "$file" ] && [ "$i" -eq "$snapshot_name" ]; then
                 snapshot_file="$file"
                 break
@@ -712,7 +712,13 @@ restore_snapshot() {
             ((i++))
         done
     else
-        snapshot_file="${env_snapshots_dir}/${snapshot_name}.tar.xz"
+        if [ -f "${env_snapshots_dir}/${snapshot_name}.tar.zst" ]; then
+            snapshot_file="${env_snapshots_dir}/${snapshot_name}.tar.zst"
+        elif [ -f "${env_snapshots_dir}/${snapshot_name}.tar.xz" ]; then
+            snapshot_file="${env_snapshots_dir}/${snapshot_name}.tar.xz"
+        else
+            snapshot_file="${env_snapshots_dir}/${snapshot_name}.tar.zst"
+        fi
     fi
     
     if [ ! -f "$snapshot_file" ]; then
@@ -735,9 +741,17 @@ restore_snapshot() {
     
     (
         cd "${ARCHSHELL_DIR}" && \
-        tar -xJf "$snapshot_file" 2>/dev/null
+        if [[ "$snapshot_file" == *.tar.zst ]]; then
+            debug_run "tar --zstd -xf '$snapshot_file'"
+        else
+            debug_run "tar -xJf '$snapshot_file'"
+        fi
     ) &
-    spinner $! "Restauration du snapshot"
+    if [[ "$snapshot_file" == *.tar.zst ]]; then
+        spinner $! "Restauration du snapshot (zstd)"
+    else
+        spinner $! "Restauration du snapshot (legacy xz)"
+    fi
     
     if [ -d "$envdir" ]; then
         sudo rm -rf "${envdir}.${backup_name}"
@@ -753,7 +767,7 @@ delete_snapshot() {
     local envname="$1"
     local snapshot_name="$2"
     local env_snapshots_dir="${SNAPSHOTS_DIR}/${envname}"
-    local snapshot_file="${env_snapshots_dir}/${snapshot_name}.tar.xz"
+    local snapshot_file="${env_snapshots_dir}/${snapshot_name}.tar.zst"
     
     if [ ! -d "${ARCHSHELL_DIR}/${envname}" ]; then
         echo -e "${RED}[!] Environnement inexistant : ${envname}${NC}"
@@ -781,7 +795,6 @@ delete_snapshot() {
     fi
 }
 
-# Gestion de l'argument --debug global
 if [ $# -gt 0 ] && [ "$1" = "--debug" ]; then
     DEBUG=true
     shift
