@@ -830,10 +830,8 @@ case "$1" in
     mkdir -p "${ARCHSHELL_DIR}/${ENVNAME}"
     total=$(sudo du -sb "$BASE_TEMPLATE" | awk '{print $1}')
     (
-      n=0
-      sudo tar cf - -C "$BASE_TEMPLATE" . | \
-      sudo tar xf - -C "${ARCHSHELL_DIR}/${ENVNAME}"
-    ) 2> >(grep -v 'socket ignorée' >&2) &
+      debug_run "sudo rsync -a --info=progress2 '$BASE_TEMPLATE/' '${ARCHSHELL_DIR}/${ENVNAME}/'"
+    ) &
     spinner $! "Copie du template"
     sudo chown -R $USER: "${ARCHSHELL_DIR}/${ENVNAME}"
     update_env_info "$ENVNAME"
