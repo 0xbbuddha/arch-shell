@@ -9,6 +9,7 @@
 
 set -euo pipefail
 
+DEBUG=false
 ARCHSHELL_DIR="${HOME}/.arch-shell"
 ARCHSHELL_STORE="${ARCHSHELL_DIR}/store"
 BASE_TEMPLATE="${ARCHSHELL_STORE}/base-template"
@@ -34,8 +35,46 @@ spinner() {
   tput cnorm
 }
 
+debug_log() {
+    if [ "$DEBUG" = true ]; then
+        echo -e "${BLUE}[DEBUG]${NC} $*" >&2
+    fi
+}
+
+debug_run() {
+    local cmd="$*"
+    debug_log "Exécution: $cmd"
+    
+    if [ "$DEBUG" = true ]; then
+        eval "$cmd"
+        return $?
+    else
+        eval "$cmd" > /dev/null 2>&1
+        return $?
+    fi
+}
+
 usage() {
-    echo "Usage: $0 init | regen-base | create <env> | -S <env> <pkg...> | -R <env> <pkg...> | enter <env> | delete <env> | list | info <env> | export <env> <file> | import <file> <env> | run <env> <command> [options] | clean <env> [options] | snapshot <env> [options]"
+    echo "Usage: $0 [--debug] <command> [options]"
+    echo ""
+    echo "Options globales:"
+    echo "  --debug             Afficher les commandes et sorties en temps réel"
+    echo ""
+    echo "Commandes:"
+    echo "  init                Initialiser arch-shell"
+    echo "  regen-base          Régénérer le template de base"
+    echo "  create <env>        Créer un nouvel environnement"
+    echo "  -S <env> <pkg...>   Installer des paquets dans un environnement"
+    echo "  -R <env> <pkg...>   Supprimer des paquets d'un environnement"
+    echo "  enter <env>         Entrer dans un environnement"
+    echo "  delete <env>        Supprimer un environnement"
+    echo "  list                Lister tous les environnements"
+    echo "  info <env>          Afficher les informations d'un environnement"
+    echo "  export <env> <file> Exporter un environnement"
+    echo "  import <file> <env> Importer un environnement"
+    echo "  run <env> <command> Exécuter une commande dans un environnement"
+    echo "  clean <env>         Nettoyer un environnement"
+    echo "  snapshot <env>      Gérer les snapshots d'un environnement"
     exit 1
 }
 
@@ -524,14 +563,14 @@ run_command() {
         echo -e "${BLUE}[*] Exécution du script ${script_file} dans ${envname}...${NC}"
         
         local script_name=$(basename "$script_file")
-        sudo mkdir -p "${envdir}/root"
-        sudo cp "$script_file" "${envdir}/root/${script_name}"
-        sudo chmod +x "${envdir}/root/${script_name}"
+        debug_run "sudo mkdir -p '${envdir}/root'"
+        debug_run "sudo cp '$script_file' '${envdir}/root/${script_name}'"
+        debug_run "sudo chmod +x '${envdir}/root/${script_name}'"
         
-        sudo arch-nspawn -c /var/cache/pacman/pkg "$envdir" /bin/bash -c "cd /root && ./${script_name}"
+        debug_run "sudo arch-nspawn -c /var/cache/pacman/pkg '$envdir' /bin/bash -c 'cd /root && ./${script_name}'"
         local exit_code=$?
         
-        sudo rm -f "${envdir}/root/${script_name}"
+        debug_run "sudo rm -f '${envdir}/root/${script_name}'"
         
         if [ $exit_code -eq 0 ]; then
             echo -e "${GREEN}[*] Script exécuté avec succès${NC}"
@@ -549,9 +588,9 @@ run_command() {
         echo -e "${BLUE}[*] Exécution de '${command}' dans ${envname}...${NC}"
         
         if [ -n "$env_vars" ]; then
-            sudo arch-nspawn -c /var/cache/pacman/pkg "$envdir" /bin/bash -c "export $env_vars >/dev/null 2>&1; $command"
+            debug_run "sudo arch-nspawn -c /var/cache/pacman/pkg '$envdir' /bin/bash -c 'export $env_vars >/dev/null 2>&1; $command'"
         else
-            sudo arch-nspawn -c /var/cache/pacman/pkg "$envdir" /bin/bash -c "$command"
+            debug_run "sudo arch-nspawn -c /var/cache/pacman/pkg '$envdir' /bin/bash -c '$command'"
         fi
         
         local exit_code=$?
@@ -737,6 +776,13 @@ delete_snapshot() {
     fi
 }
 
+# Gestion de l'argument --debug global
+if [ $# -gt 0 ] && [ "$1" = "--debug" ]; then
+    DEBUG=true
+    shift
+    debug_log "Mode debug activé"
+fi
+
 if [ $# -lt 1 ]; then
     usage
 fi
@@ -749,7 +795,7 @@ case "$1" in
     else
       echo -e "${BLUE}[*] Création du template de base...${NC}"
       (
-        sudo mkarchroot "$BASE_TEMPLATE" base > /dev/null 2>&1
+        debug_run "sudo mkarchroot '$BASE_TEMPLATE' base"
       ) &
       spinner $! "Création du template de base"
       echo -e "${GREEN}[*] Template de base créé.${NC}"
@@ -759,10 +805,10 @@ case "$1" in
     mkdir -p "$ARCHSHELL_STORE"
     echo -e "${BLUE}[*] Régénération du template de base...${NC}"
     if [ -d "$BASE_TEMPLATE" ]; then
-      sudo rm -rf "$BASE_TEMPLATE"
+      debug_run "sudo rm -rf '$BASE_TEMPLATE'"
     fi
     (
-      sudo mkarchroot "$BASE_TEMPLATE" base > /dev/null 2>&1
+      debug_run "sudo mkarchroot '$BASE_TEMPLATE' base"
     ) &
     spinner $! "Régénération du template de base"
     echo -e "${GREEN}[*] Template de base régénéré.${NC}"
@@ -805,14 +851,23 @@ case "$1" in
     fi
     echo -e "${BLUE}[*] Installation de(s) paquet(s) $* dans $ENVNAME...${NC}"
     (
-      sudo arch-nspawn -c /var/cache/pacman/pkg "${ARCHSHELL_DIR}/${ENVNAME}" pacman -S --noconfirm "$@" > /dev/null 2>&1
+      debug_run "sudo arch-nspawn -c /var/cache/pacman/pkg '${ARCHSHELL_DIR}/${ENVNAME}' pacman -S --noconfirm $*"
     ) &
-    spinner $! "Installation des paquets"
-    echo -e "${GREEN}[*] Installation terminée.${NC}"
-    update_last_used "$ENVNAME"
-    for pkg in "$@"; do
-      add_package "$ENVNAME" "$pkg"
-    done
+    install_pid=$!
+    spinner $install_pid "Installation des paquets"
+    wait $install_pid
+    install_result=$?
+    
+    if [ $install_result -eq 0 ]; then
+      echo -e "${GREEN}[*] Installation terminée.${NC}"
+      update_last_used "$ENVNAME"
+      for pkg in "$@"; do
+        add_package "$ENVNAME" "$pkg"
+      done
+    else
+      echo -e "${RED}[!] Installation échouée (code: $install_result)${NC}"
+      exit $install_result
+    fi
     ;;
   -R)
     if [ $# -lt 3 ]; then
@@ -843,14 +898,23 @@ case "$1" in
     
     echo -e "${BLUE}[*] Suppression de(s) paquet(s) $* dans $ENVNAME...${NC}"
     (
-      sudo arch-nspawn -c /var/cache/pacman/pkg "${ARCHSHELL_DIR}/${ENVNAME}" pacman -R --noconfirm "$@" > /dev/null 2>&1
+      debug_run "sudo arch-nspawn -c /var/cache/pacman/pkg '${ARCHSHELL_DIR}/${ENVNAME}' pacman -R --noconfirm $*"
     ) &
-    spinner $! "Suppression des paquets"
-    echo -e "${GREEN}[*] Suppression terminée.${NC}"
-    update_last_used "$ENVNAME"
-    for pkg in "$@"; do
-      remove_package "$ENVNAME" "$pkg"
-    done
+    remove_pid=$!
+    spinner $remove_pid "Suppression des paquets"
+    wait $remove_pid
+    remove_result=$?
+    
+    if [ $remove_result -eq 0 ]; then
+      echo -e "${GREEN}[*] Suppression terminée.${NC}"
+      update_last_used "$ENVNAME"
+      for pkg in "$@"; do
+        remove_package "$ENVNAME" "$pkg"
+      done
+    else
+      echo -e "${RED}[!] Suppression échouée (code: $remove_result)${NC}"
+      exit $remove_result
+    fi
     ;;
   enter)
     if [ $# -lt 2 ]; then
