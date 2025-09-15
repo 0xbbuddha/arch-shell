@@ -13,6 +13,7 @@ DEBUG=false
 ARCHSHELL_DIR="${HOME}/.arch-shell"
 ARCHSHELL_STORE="${ARCHSHELL_DIR}/store"
 BASE_TEMPLATE="${ARCHSHELL_STORE}/base-template"
+SHARED_CACHE="${ARCHSHELL_DIR}/cache"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -75,6 +76,8 @@ usage() {
     echo "  run <env> <command> Exécuter une commande dans un environnement"
     echo "  clean <env>         Nettoyer un environnement"
     echo "  snapshot <env>      Gérer les snapshots d'un environnement"
+    echo "  cache --stats       Afficher les statistiques du cache partagé"
+    echo "  cache --clean       Nettoyer le cache partagé"
     exit 1
 }
 
@@ -137,6 +140,92 @@ usage_clean() {
     echo "  $0 clean --all-envs                 # Nettoyer tous les environnements"
     echo "  $0 clean --all-envs --dry-run       # Aperçu pour tous les environnements"
     exit 1
+}
+
+init_shared_cache() {
+    debug_log "Initialisation du cache partagé dans $SHARED_CACHE"
+    mkdir -p "$SHARED_CACHE/pkg"
+    mkdir -p "$SHARED_CACHE/db"
+    
+    local stats_file="$SHARED_CACHE/cache-stats.json"
+    if [ ! -f "$stats_file" ]; then
+        cat > "$stats_file" << EOF
+{
+  "created": "$(date -Iseconds)",
+  "total_downloads": 0,
+  "cache_hits": 0,
+  "total_size": 0,
+  "packages_count": 0,
+  "last_updated": "$(date -Iseconds)"
+}
+EOF
+        debug_log "Fichier de statistiques du cache créé"
+    fi
+}
+
+update_cache_stats() {
+    local stats_file="$SHARED_CACHE/cache-stats.json"
+    local pkg_count=$(find "$SHARED_CACHE/pkg" -name "*.pkg.tar.*" 2>/dev/null | wc -l || echo "0")
+    local total_size=$(du -sb "$SHARED_CACHE/pkg" 2>/dev/null | awk '{print $1}' || echo "0")
+    
+    if [ -f "$stats_file" ] && command -v jq >/dev/null 2>&1; then
+        jq ".packages_count = $pkg_count | .total_size = $total_size | .last_updated = \"$(date -Iseconds)\"" "$stats_file" > "${stats_file}.tmp" && mv "${stats_file}.tmp" "$stats_file"
+    fi
+}
+
+track_cache_hit() {
+    local pkg="$1"
+    local stats_file="$SHARED_CACHE/cache-stats.json"
+    
+    if find "$SHARED_CACHE/pkg" -name "${pkg}-*.pkg.tar.*" -type f 2>/dev/null | head -1 | grep -q .; then
+        echo -e "${GREEN}[*] Cache hit pour ${pkg}${NC}"
+        
+        if [ -f "$stats_file" ] && command -v jq >/dev/null 2>&1; then
+            local hits=$(jq -r '.cache_hits // 0' "$stats_file" 2>/dev/null || echo "0")
+            if [ "$hits" != "null" ] && [ -n "$hits" ]; then
+                jq ".cache_hits = $((hits + 1))" "$stats_file" > "${stats_file}.tmp" && mv "${stats_file}.tmp" "$stats_file" 2>/dev/null || true
+            fi
+        fi
+        return 0
+    fi
+    return 1
+}
+
+track_download() {
+    local stats_file="$SHARED_CACHE/cache-stats.json"
+    local packages_count="$1"
+    
+    if [ -f "$stats_file" ] && command -v jq >/dev/null 2>&1; then
+        local downloads=$(jq -r '.total_downloads // 0' "$stats_file" 2>/dev/null || echo "0")
+        if [ "$downloads" != "null" ] && [ -n "$downloads" ]; then
+            jq ".total_downloads = $((downloads + packages_count))" "$stats_file" > "${stats_file}.tmp" && mv "${stats_file}.tmp" "$stats_file" 2>/dev/null || true
+        fi
+    fi
+}
+
+show_cache_stats() {
+    local stats_file="$SHARED_CACHE/cache-stats.json"
+    local cache_size=$(du -sh "$SHARED_CACHE/pkg" 2>/dev/null | awk '{print $1}' || echo "0")
+    local pkg_count=$(find "$SHARED_CACHE/pkg" -name "*.pkg.tar.*" 2>/dev/null | wc -l || echo "0")
+    
+    echo -e "${BLUE}[*] Statistiques du cache partagé arch-shell :${NC}"
+    echo -e "${GREEN}  Paquets en cache : ${pkg_count}${NC}"
+    echo -e "${GREEN}  Taille du cache : ${cache_size}${NC}"
+    
+    if [ -f "$stats_file" ] && command -v jq >/dev/null 2>&1; then
+        local hits=$(jq -r '.cache_hits // 0' "$stats_file" 2>/dev/null || echo "0")
+        local downloads=$(jq -r '.total_downloads // 0' "$stats_file" 2>/dev/null || echo "0")
+        local created=$(jq -r '.created // "N/A"' "$stats_file" 2>/dev/null || echo "N/A")
+        
+        echo -e "${GREEN}  Cache hits : ${hits}${NC}"
+        echo -e "${GREEN}  Téléchargements : ${downloads}${NC}"
+        echo -e "${GREEN}  Créé le : ${created}${NC}"
+        
+        if [ "$downloads" -gt 0 ]; then
+            local hit_rate=$((hits * 100 / (hits + downloads)))
+            echo -e "${GREEN}  Taux de cache hits : ${hit_rate}%${NC}"
+        fi
+    fi
 }
 
 update_env_info() {
@@ -565,7 +654,7 @@ run_command() {
         debug_run "sudo cp '$script_file' '${envdir}/root/${script_name}'"
         debug_run "sudo chmod +x '${envdir}/root/${script_name}'"
         
-        debug_run "sudo arch-nspawn -c /var/cache/pacman/pkg '$envdir' /bin/bash -c 'cd /root && ./${script_name}'"
+        debug_run "sudo arch-nspawn -c '$SHARED_CACHE/pkg' '$envdir' /bin/bash -c 'cd /root && ./${script_name}'"
         local exit_code=$?
         
         debug_run "sudo rm -f '${envdir}/root/${script_name}'"
@@ -586,9 +675,9 @@ run_command() {
         echo -e "${BLUE}[*] Exécution de '${command}' dans ${envname}...${NC}"
         
         if [ -n "$env_vars" ]; then
-            debug_run "sudo arch-nspawn -c /var/cache/pacman/pkg '$envdir' /bin/bash -c 'export $env_vars >/dev/null 2>&1; $command'"
+            debug_run "sudo arch-nspawn -c '$SHARED_CACHE/pkg' '$envdir' /bin/bash -c 'export $env_vars >/dev/null 2>&1; $command'"
         else
-            debug_run "sudo arch-nspawn -c /var/cache/pacman/pkg '$envdir' /bin/bash -c '$command'"
+            debug_run "sudo arch-nspawn -c '$SHARED_CACHE/pkg' '$envdir' /bin/bash -c '$command'"
         fi
         
         local exit_code=$?
@@ -808,6 +897,7 @@ fi
 case "$1" in
   init)
     mkdir -p "$ARCHSHELL_STORE"
+    init_shared_cache
     if [ -d "$BASE_TEMPLATE" ]; then
       echo "Template de base existe déjà. Utilisez 'regen-base' pour le régénérer."
     else
@@ -821,6 +911,7 @@ case "$1" in
     ;;
   regen-base)
     mkdir -p "$ARCHSHELL_STORE"
+    init_shared_cache
     echo -e "${BLUE}[*] Régénération du template de base...${NC}"
     if [ -d "$BASE_TEMPLATE" ]; then
       debug_run "sudo rm -rf '$BASE_TEMPLATE'"
@@ -865,9 +956,19 @@ case "$1" in
     if [ ! -d "${ARCHSHELL_DIR}/${ENVNAME}" ]; then
       echo "Environnement inexistant : ${ENVNAME}"; exit 3;
     fi
+    init_shared_cache
+    cache_hits=0
+    total_packages=$#
+    for pkg in "$@"; do
+        if track_cache_hit "$pkg"; then
+            cache_hits=$((cache_hits + 1))
+        fi
+    done
+    new_downloads=$((total_packages - cache_hits))
+    
     echo -e "${BLUE}[*] Installation de(s) paquet(s) $* dans $ENVNAME...${NC}"
     (
-      debug_run "sudo arch-nspawn -c /var/cache/pacman/pkg '${ARCHSHELL_DIR}/${ENVNAME}' pacman -S --noconfirm $*"
+      debug_run "sudo arch-nspawn -c '$SHARED_CACHE/pkg' '${ARCHSHELL_DIR}/${ENVNAME}' pacman -S --noconfirm $*"
     ) &
     install_pid=$!
     spinner $install_pid "Installation des paquets"
@@ -880,6 +981,10 @@ case "$1" in
       for pkg in "$@"; do
         add_package "$ENVNAME" "$pkg"
       done
+      if [ $new_downloads -gt 0 ]; then
+        track_download $new_downloads
+      fi
+      update_cache_stats
     else
       echo -e "${RED}[!] Installation échouée (code: $install_result)${NC}"
       exit $install_result
@@ -895,6 +1000,7 @@ case "$1" in
     if [ ! -d "${ARCHSHELL_DIR}/${ENVNAME}" ]; then
       echo "Environnement inexistant : ${ENVNAME}"; exit 3;
     fi
+    init_shared_cache
     
     missing_packages=()
     for pkg in "$@"; do
@@ -914,7 +1020,7 @@ case "$1" in
     
     echo -e "${BLUE}[*] Suppression de(s) paquet(s) $* dans $ENVNAME...${NC}"
     (
-      debug_run "sudo arch-nspawn -c /var/cache/pacman/pkg '${ARCHSHELL_DIR}/${ENVNAME}' pacman -R --noconfirm $*"
+      debug_run "sudo arch-nspawn -c '$SHARED_CACHE/pkg' '${ARCHSHELL_DIR}/${ENVNAME}' pacman -R --noconfirm $*"
     ) &
     remove_pid=$!
     spinner $remove_pid "Suppression des paquets"
@@ -941,9 +1047,10 @@ case "$1" in
     if [ ! -d "${ARCHSHELL_DIR}/${ENVNAME}" ]; then
       echo "Environnement inexistant : ${ENVNAME}"; exit 3;
     fi
+    init_shared_cache
     echo "Entrée dans l'environnement $ENVNAME."
     update_last_used "$ENVNAME"
-    sudo arch-nspawn -c /var/cache/pacman/pkg "${ARCHSHELL_DIR}/${ENVNAME}"
+    sudo arch-nspawn -c "$SHARED_CACHE/pkg" "${ARCHSHELL_DIR}/${ENVNAME}"
     ;;
   delete)
     if [ $# -lt 2 ]; then
@@ -1057,6 +1164,35 @@ case "$1" in
     else
       create_snapshot "$2" "${3:-}"
     fi
+    ;;
+  cache)
+    case "${2:-}" in
+      --stats)
+        init_shared_cache
+        show_cache_stats
+        ;;
+      --clean)
+        init_shared_cache
+        local days_old="${3:-30}"
+        echo -e "${BLUE}[*] Nettoyage du cache partagé (paquets > ${days_old} jours)...${NC}"
+        local before_count=$(find "$SHARED_CACHE/pkg" -name "*.pkg.tar.*" 2>/dev/null | wc -l || echo "0")
+        local before_size=$(du -sb "$SHARED_CACHE/pkg" 2>/dev/null | awk '{print $1}' || echo "0")
+        
+        find "$SHARED_CACHE/pkg" -name "*.pkg.tar.*" -mtime +$days_old -delete 2>/dev/null
+        
+        local after_count=$(find "$SHARED_CACHE/pkg" -name "*.pkg.tar.*" 2>/dev/null | wc -l || echo "0")
+        local after_size=$(du -sb "$SHARED_CACHE/pkg" 2>/dev/null | awk '{print $1}' || echo "0")
+        local freed=$((before_size - after_size))
+        local removed=$((before_count - after_count))
+        
+        echo -e "${GREEN}[*] Cache nettoyé : ${removed} paquets supprimés ($(numfmt --to=iec $freed) libérés)${NC}"
+        update_cache_stats
+        ;;
+      *)
+        echo "Usage: $0 cache --stats|--clean [jours]"
+        exit 1
+        ;;
+    esac
     ;;
   *)
     usage
