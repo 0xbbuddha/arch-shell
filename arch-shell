@@ -1173,17 +1173,17 @@ case "$1" in
         ;;
       --clean)
         init_shared_cache
-        local days_old="${3:-30}"
+        days_old="${3:-30}"
         echo -e "${BLUE}[*] Nettoyage du cache partagé (paquets > ${days_old} jours)...${NC}"
-        local before_count=$(find "$SHARED_CACHE/pkg" -name "*.pkg.tar.*" 2>/dev/null | wc -l || echo "0")
-        local before_size=$(du -sb "$SHARED_CACHE/pkg" 2>/dev/null | awk '{print $1}' || echo "0")
+        before_count=$(find "$SHARED_CACHE/pkg" -name "*.pkg.tar.*" 2>/dev/null | wc -l || echo "0")
+        before_size=$(du -sb "$SHARED_CACHE/pkg" 2>/dev/null | awk '{print $1}' || echo "0")
         
         find "$SHARED_CACHE/pkg" -name "*.pkg.tar.*" -mtime +$days_old -delete 2>/dev/null
         
-        local after_count=$(find "$SHARED_CACHE/pkg" -name "*.pkg.tar.*" 2>/dev/null | wc -l || echo "0")
-        local after_size=$(du -sb "$SHARED_CACHE/pkg" 2>/dev/null | awk '{print $1}' || echo "0")
-        local freed=$((before_size - after_size))
-        local removed=$((before_count - after_count))
+        after_count=$(find "$SHARED_CACHE/pkg" -name "*.pkg.tar.*" 2>/dev/null | wc -l || echo "0")
+        after_size=$(du -sb "$SHARED_CACHE/pkg" 2>/dev/null | awk '{print $1}' || echo "0")
+        freed=$((before_size - after_size))
+        removed=$((before_count - after_count))
         
         echo -e "${GREEN}[*] Cache nettoyé : ${removed} paquets supprimés ($(numfmt --to=iec $freed) libérés)${NC}"
         update_cache_stats
