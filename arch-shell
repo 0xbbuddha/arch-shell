@@ -10,6 +10,7 @@
 set -euo pipefail
 
 DEBUG=false
+NO_COLOR=false
 ARCHSHELL_DIR="${HOME}/.arch-shell"
 ARCHSHELL_STORE="${ARCHSHELL_DIR}/store"
 BASE_TEMPLATE="${ARCHSHELL_STORE}/base-template"
@@ -20,6 +21,16 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
+
+init_colors() {
+    if [ "$NO_COLOR" = true ]; then
+        RED=''
+        GREEN=''
+        YELLOW=''
+        BLUE=''
+        NC=''
+    fi
+}
 
 spinner() {
   local pid=$1
@@ -56,10 +67,11 @@ debug_run() {
 }
 
 usage() {
-    echo "Usage: $0 [--debug] <command> [options]"
+    echo "Usage: $0 [--debug] [--no-color] <command> [options]"
     echo ""
     echo "Options globales:"
     echo "  --debug             Afficher les commandes et sorties en temps réel"
+    echo "  --no-color          Désactiver les couleurs dans la sortie"
     echo ""
     echo "Commandes:"
     echo "  init                Initialiser arch-shell"
@@ -884,11 +896,25 @@ delete_snapshot() {
     fi
 }
 
-if [ $# -gt 0 ] && [ "$1" = "--debug" ]; then
-    DEBUG=true
-    shift
-    debug_log "Mode debug activé"
-fi
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --debug)
+            DEBUG=true
+            shift
+            debug_log "Mode debug activé"
+            ;;
+        --no-color)
+            NO_COLOR=true
+            shift
+            debug_log "Mode sans couleur activé"
+            ;;
+        *)
+            break
+            ;;
+    esac
+done
+
+init_colors
 
 if [ $# -lt 1 ]; then
     usage
