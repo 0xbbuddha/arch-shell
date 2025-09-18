@@ -12,6 +12,7 @@ set -euo pipefail
 DEBUG=false
 NO_COLOR=false
 YES=false
+QUIET=false
 ARCHSHELL_DIR="${HOME}/.arch-shell"
 ARCHSHELL_STORE="${ARCHSHELL_DIR}/store"
 BASE_TEMPLATE="${ARCHSHELL_STORE}/base-template"
@@ -50,11 +51,27 @@ ask_confirmation() {
     fi
 }
 
+quiet_log() {
+    if [ "$QUIET" != true ]; then
+        echo -e "$@"
+    fi
+}
+
+error_log() {
+    echo -e "$@" >&2
+}
+
 spinner() {
   local pid=$1
   local msg="$2"
   local spinstr='|/-\\'
   local i=0
+  
+  if [ "$QUIET" = true ]; then
+    wait $pid
+    return
+  fi
+  
   tput civis
   while kill -0 $pid 2>/dev/null; do
     i=$(( (i+1) %4 ))
@@ -85,12 +102,13 @@ debug_run() {
 }
 
 usage() {
-    echo "Usage: $0 [--debug] [--no-color] [--yes] <command> [options]"
+    echo "Usage: $0 [--debug] [--no-color] [--yes] [--quiet] <command> [options]"
     echo ""
     echo "Options globales:"
     echo "  --debug             Afficher les commandes et sorties en temps réel"
     echo "  --no-color          Désactiver les couleurs dans la sortie"
-    echo "  --yes,              Répondre automatiquement 'oui' aux confirmations"
+    echo "  --yes               Répondre automatiquement 'oui' aux confirmations"
+    echo "  --quiet             Afficher seulement les erreurs"
     echo ""
     echo "Commandes:"
     echo "  init                Initialiser arch-shell"
@@ -398,12 +416,12 @@ EOF
     
     rm -rf "$temp_dir"
     
-    echo -e "${GREEN}[*] Export terminé : ${export_file}${NC}"
-    echo -e "${GREEN}[*] Checksum SHA256 : ${checksum}${NC}"
+    quiet_log "${GREEN}[*] Export terminé : ${export_file}${NC}"
+    quiet_log "${GREEN}[*] Checksum SHA256 : ${checksum}${NC}"
     
     local archive_size
     archive_size=$(du -h "$export_file" | awk '{print $1}')
-    echo -e "${GREEN}[*] Taille de l'archive : ${archive_size}${NC}"
+    quiet_log "${GREEN}[*] Taille de l'archive : ${archive_size}${NC}"
 }
 
 import_env() {
@@ -925,7 +943,12 @@ while [ $# -gt 0 ]; do
         --yes)
             YES=true
             shift
-            debug_log "Mode automatique activé (--yes)"
+            debug_log "Mode automatique activé"
+            ;;
+        --quiet)
+            QUIET=true
+            shift
+            debug_log "Mode silencieux activé"
             ;;
         *)
             break
