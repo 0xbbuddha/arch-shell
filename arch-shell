@@ -10,6 +10,9 @@
 set -euo pipefail
 
 DEBUG=false
+NO_COLOR=false
+YES=false
+QUIET=false
 ARCHSHELL_DIR="${HOME}/.arch-shell"
 ARCHSHELL_STORE="${ARCHSHELL_DIR}/store"
 BASE_TEMPLATE="${ARCHSHELL_STORE}/base-template"
@@ -21,11 +24,54 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
+init_colors() {
+    if [ "$NO_COLOR" = true ]; then
+        RED=''
+        GREEN=''
+        YELLOW=''
+        BLUE=''
+        NC=''
+    fi
+}
+
+ask_confirmation() {
+    local prompt="$1"
+    local default="${2:-N}"
+    
+    if [ "$YES" = true ]; then
+        echo -e "${GREEN}[*] ${prompt} [AUTO-YES]${NC}"
+        return 0
+    fi
+    
+    read -p "$prompt" -r
+    if [[ $REPLY =~ ^[oOyY]$ ]]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+quiet_log() {
+    if [ "$QUIET" != true ]; then
+        echo -e "$@"
+    fi
+}
+
+error_log() {
+    echo -e "$@" >&2
+}
+
 spinner() {
   local pid=$1
   local msg="$2"
   local spinstr='|/-\\'
   local i=0
+  
+  if [ "$QUIET" = true ]; then
+    wait $pid
+    return
+  fi
+  
   tput civis
   while kill -0 $pid 2>/dev/null; do
     i=$(( (i+1) %4 ))
@@ -56,10 +102,13 @@ debug_run() {
 }
 
 usage() {
-    echo "Usage: $0 [--debug] <command> [options]"
+    echo "Usage: $0 [--debug] [--no-color] [--yes] [--quiet] <command> [options]"
     echo ""
     echo "Options globales:"
     echo "  --debug             Afficher les commandes et sorties en temps réel"
+    echo "  --no-color          Désactiver les couleurs dans la sortie"
+    echo "  --yes               Répondre automatiquement 'oui' aux confirmations"
+    echo "  --quiet             Afficher seulement les erreurs"
     echo ""
     echo "Commandes:"
     echo "  init                Initialiser arch-shell"
@@ -324,8 +373,7 @@ export_env() {
     
     if [ -f "$export_file" ]; then
         echo -e "${YELLOW}[?] Le fichier ${export_file} existe déjà${NC}"
-        read -p "Écraser le fichier existant ? [o/N] " -r
-        if [[ ! $REPLY =~ ^[oOyY]$ ]]; then
+        if ! ask_confirmation "Écraser le fichier existant ? [o/N] "; then
             echo -e "${YELLOW}[!] Export annulé${NC}"
             return 1
         fi
@@ -368,12 +416,12 @@ EOF
     
     rm -rf "$temp_dir"
     
-    echo -e "${GREEN}[*] Export terminé : ${export_file}${NC}"
-    echo -e "${GREEN}[*] Checksum SHA256 : ${checksum}${NC}"
+    quiet_log "${GREEN}[*] Export terminé : ${export_file}${NC}"
+    quiet_log "${GREEN}[*] Checksum SHA256 : ${checksum}${NC}"
     
     local archive_size
     archive_size=$(du -h "$export_file" | awk '{print $1}')
-    echo -e "${GREEN}[*] Taille de l'archive : ${archive_size}${NC}"
+    quiet_log "${GREEN}[*] Taille de l'archive : ${archive_size}${NC}"
 }
 
 import_env() {
@@ -816,9 +864,7 @@ restore_snapshot() {
     fi
     
     echo -e "${YELLOW}[!] ATTENTION: Cette opération va remplacer l'environnement actuel${NC}"
-    read -p "Continuer ? [o/N] " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[oOyY]$ ]]; then
+    if ! ask_confirmation "Continuer ? [o/N] "; then
         echo "Annulé."
         exit 0
     fi
@@ -868,9 +914,7 @@ delete_snapshot() {
         exit 5
     fi
     
-    read -p "Supprimer définitivement le snapshot '${snapshot_name}' ? [o/N] " -n 1 -r
-    echo
-    if [[ $REPLY =~ ^[oOyY]$ ]]; then
+    if ask_confirmation "Supprimer définitivement le snapshot '${snapshot_name}' ? [o/N] "; then
         rm -f "$snapshot_file"
         
         local metadata_file="${env_snapshots_dir}/snapshots.json"
@@ -884,11 +928,35 @@ delete_snapshot() {
     fi
 }
 
-if [ $# -gt 0 ] && [ "$1" = "--debug" ]; then
-    DEBUG=true
-    shift
-    debug_log "Mode debug activé"
-fi
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --debug)
+            DEBUG=true
+            shift
+            debug_log "Mode debug activé"
+            ;;
+        --no-color)
+            NO_COLOR=true
+            shift
+            debug_log "Mode sans couleur activé"
+            ;;
+        --yes)
+            YES=true
+            shift
+            debug_log "Mode automatique activé"
+            ;;
+        --quiet)
+            QUIET=true
+            shift
+            debug_log "Mode silencieux activé"
+            ;;
+        *)
+            break
+            ;;
+    esac
+done
+
+init_colors
 
 if [ $# -lt 1 ]; then
     usage
@@ -1061,8 +1129,7 @@ case "$1" in
     if [ ! -d "${ARCHSHELL_DIR}/${ENVNAME}" ]; then
       echo "Environnement inexistant : ${ENVNAME}"; exit 3;
     fi
-    read -p "Supprimer définitivement ${ENVNAME} ? [o/N] " REP
-    if [[ "$REP" =~ ^[oOyY]$ ]]; then
+    if ask_confirmation "Supprimer définitivement ${ENVNAME} ? [o/N] "; then
       sudo rm -rf "${ARCHSHELL_DIR}/${ENVNAME}"
       LOCKFILE="${ARCHSHELL_DIR}/${ENVNAME}.lock"
       if [ -f "$LOCKFILE" ]; then
