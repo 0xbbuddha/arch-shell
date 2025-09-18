@@ -11,6 +11,7 @@ set -euo pipefail
 
 DEBUG=false
 NO_COLOR=false
+YES=false
 ARCHSHELL_DIR="${HOME}/.arch-shell"
 ARCHSHELL_STORE="${ARCHSHELL_DIR}/store"
 BASE_TEMPLATE="${ARCHSHELL_STORE}/base-template"
@@ -29,6 +30,23 @@ init_colors() {
         YELLOW=''
         BLUE=''
         NC=''
+    fi
+}
+
+ask_confirmation() {
+    local prompt="$1"
+    local default="${2:-N}"
+    
+    if [ "$YES" = true ]; then
+        echo -e "${GREEN}[*] ${prompt} [AUTO-YES]${NC}"
+        return 0
+    fi
+    
+    read -p "$prompt" -r
+    if [[ $REPLY =~ ^[oOyY]$ ]]; then
+        return 0
+    else
+        return 1
     fi
 }
 
@@ -67,11 +85,12 @@ debug_run() {
 }
 
 usage() {
-    echo "Usage: $0 [--debug] [--no-color] <command> [options]"
+    echo "Usage: $0 [--debug] [--no-color] [--yes] <command> [options]"
     echo ""
     echo "Options globales:"
     echo "  --debug             Afficher les commandes et sorties en temps réel"
     echo "  --no-color          Désactiver les couleurs dans la sortie"
+    echo "  --yes,              Répondre automatiquement 'oui' aux confirmations"
     echo ""
     echo "Commandes:"
     echo "  init                Initialiser arch-shell"
@@ -336,8 +355,7 @@ export_env() {
     
     if [ -f "$export_file" ]; then
         echo -e "${YELLOW}[?] Le fichier ${export_file} existe déjà${NC}"
-        read -p "Écraser le fichier existant ? [o/N] " -r
-        if [[ ! $REPLY =~ ^[oOyY]$ ]]; then
+        if ! ask_confirmation "Écraser le fichier existant ? [o/N] "; then
             echo -e "${YELLOW}[!] Export annulé${NC}"
             return 1
         fi
@@ -828,9 +846,7 @@ restore_snapshot() {
     fi
     
     echo -e "${YELLOW}[!] ATTENTION: Cette opération va remplacer l'environnement actuel${NC}"
-    read -p "Continuer ? [o/N] " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[oOyY]$ ]]; then
+    if ! ask_confirmation "Continuer ? [o/N] "; then
         echo "Annulé."
         exit 0
     fi
@@ -880,9 +896,7 @@ delete_snapshot() {
         exit 5
     fi
     
-    read -p "Supprimer définitivement le snapshot '${snapshot_name}' ? [o/N] " -n 1 -r
-    echo
-    if [[ $REPLY =~ ^[oOyY]$ ]]; then
+    if ask_confirmation "Supprimer définitivement le snapshot '${snapshot_name}' ? [o/N] "; then
         rm -f "$snapshot_file"
         
         local metadata_file="${env_snapshots_dir}/snapshots.json"
@@ -907,6 +921,11 @@ while [ $# -gt 0 ]; do
             NO_COLOR=true
             shift
             debug_log "Mode sans couleur activé"
+            ;;
+        --yes)
+            YES=true
+            shift
+            debug_log "Mode automatique activé (--yes)"
             ;;
         *)
             break
@@ -1087,8 +1106,7 @@ case "$1" in
     if [ ! -d "${ARCHSHELL_DIR}/${ENVNAME}" ]; then
       echo "Environnement inexistant : ${ENVNAME}"; exit 3;
     fi
-    read -p "Supprimer définitivement ${ENVNAME} ? [o/N] " REP
-    if [[ "$REP" =~ ^[oOyY]$ ]]; then
+    if ask_confirmation "Supprimer définitivement ${ENVNAME} ? [o/N] "; then
       sudo rm -rf "${ARCHSHELL_DIR}/${ENVNAME}"
       LOCKFILE="${ARCHSHELL_DIR}/${ENVNAME}.lock"
       if [ -f "$LOCKFILE" ]; then
