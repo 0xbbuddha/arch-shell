@@ -28,7 +28,6 @@ categorize_prs() {
     if [ -n "$feat_prs" ]; then
         result="$result
 
-### New Features
 $feat_prs"
     fi
     
@@ -36,7 +35,6 @@ $feat_prs"
     if [ -n "$fix_prs" ]; then
         result="$result
 
-### Bug Fixes
 $fix_prs"
     fi
     
@@ -44,7 +42,6 @@ $fix_prs"
     if [ -n "$docs_prs" ]; then
         result="$result
 
-### Documentation
 $docs_prs"
     fi
     
@@ -52,7 +49,6 @@ $docs_prs"
     if [ -n "$refactor_prs" ]; then
         result="$result
 
-### Technical Improvements
 $refactor_prs"
     fi
     
@@ -60,7 +56,6 @@ $refactor_prs"
     if [ -n "$ci_prs" ]; then
         result="$result
 
-### CI/CD & Build
 $ci_prs"
     fi
     
