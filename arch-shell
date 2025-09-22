@@ -125,8 +125,7 @@ usage() {
     echo "  run <env> <command> Exécuter une commande dans un environnement"
     echo "  clean <env>         Nettoyer un environnement"
     echo "  snapshot <env>      Gérer les snapshots d'un environnement"
-    echo "  cache --stats       Afficher les statistiques du cache partagé"
-    echo "  cache --clean       Nettoyer le cache partagé"
+    echo "  cache --stats       Interagir avec le cache partagé"
     exit 1
 }
 
@@ -159,12 +158,12 @@ usage_snapshot() {
     echo "  --delete <snap>     Supprimer un snapshot (par nom)"
     echo ""
     echo "Exemples:"
-    echo "  $0 snapshot mon-env                       # Créer un snapshot avec nom automatique"
-    echo "  $0 snapshot mon-env \"avant-test\"          # Créer un snapshot nommé"
-    echo "  $0 snapshot mon-env --list                # Lister les snapshots"
-    echo "  $0 snapshot mon-env --restore \"avant-test\"  # Restaurer par nom"
-    echo "  $0 snapshot mon-env --restore 1           # Restaurer par numéro"
-    echo "  $0 snapshot mon-env --delete \"avant-test\"   # Supprimer un snapshot"
+    echo "  $0 snapshot mon-env                          Créer un snapshot avec nom automatique"
+    echo "  $0 snapshot mon-env \"avant-test\"           Créer un snapshot nommé"
+    echo "  $0 snapshot mon-env --list                   Lister les snapshots"
+    echo "  $0 snapshot mon-env --restore \"avant-test\" Restaurer par nom"
+    echo "  $0 snapshot mon-env --restore 1              Restaurer par numéro"
+    echo "  $0 snapshot mon-env --delete \"avant-test\"  Supprimer un snapshot"
     exit 1
 }
 
@@ -182,12 +181,12 @@ usage_clean() {
     echo "  --all-envs          Nettoyer tous les environnements"
     echo ""
     echo "Exemples:"
-    echo "  $0 clean mon-env                    # Nettoyage standard (cache + tmp)"
-    echo "  $0 clean mon-env --all              # Nettoyage complet"
-    echo "  $0 clean mon-env --dry-run          # Aperçu du nettoyage"
-    echo "  $0 clean mon-env --cache            # Seulement les caches"
-    echo "  $0 clean --all-envs                 # Nettoyer tous les environnements"
-    echo "  $0 clean --all-envs --dry-run       # Aperçu pour tous les environnements"
+    echo "  $0 clean mon-env                Nettoyage standard (cache + tmp)"
+    echo "  $0 clean mon-env --all          Nettoyage complet"
+    echo "  $0 clean mon-env --dry-run      Aperçu du nettoyage"
+    echo "  $0 clean mon-env --cache        Seulement les caches"
+    echo "  $0 clean --all-envs             Nettoyer tous les environnements"
+    echo "  $0 clean --all-envs --dry-run   Aperçu pour tous les environnements"
     exit 1
 }
 
