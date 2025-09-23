@@ -23,42 +23,47 @@ categorize_prs() {
     local prs_data="$1"
     local cleaned_prs=$(clean_emojis "$prs_data")
     local result=""
-    
+
     local feat_prs=$(echo "$cleaned_prs" | grep -E "(feat|feature)" | grep -v "fix" || true)
     if [ -n "$feat_prs" ]; then
         result="$result
 
+### New Features
 $feat_prs"
     fi
-    
+
     local fix_prs=$(echo "$cleaned_prs" | grep -E "(fix|bug)" || true)
     if [ -n "$fix_prs" ]; then
         result="$result
 
+### Bug Fixes
 $fix_prs"
     fi
-    
+
     local docs_prs=$(echo "$cleaned_prs" | grep -E "(docs|doc)" || true)
     if [ -n "$docs_prs" ]; then
         result="$result
 
+### Documentation
 $docs_prs"
     fi
-    
+
     local refactor_prs=$(echo "$cleaned_prs" | grep -E "(refactor|perf|improvement)" | grep -v -E "(feat|fix|docs)" || true)
     if [ -n "$refactor_prs" ]; then
         result="$result
 
+### Technical Improvements
 $refactor_prs"
     fi
-    
+
     local ci_prs=$(echo "$cleaned_prs" | grep -E "(ci|build|chore)" || true)
     if [ -n "$ci_prs" ]; then
         result="$result
 
+### CI/CD & Build
 $ci_prs"
     fi
-    
+
     echo "$result"
 }
 
@@ -67,9 +72,9 @@ LAST_RELEASE=$(gh release list --limit 1 --exclude-pre-releases --json tagName -
 
 if [ -n "$LAST_RELEASE" ]; then
     echo "   Dernière release: $LAST_RELEASE"
-    
+
     RELEASE_DATE=$(gh release view $LAST_RELEASE --json publishedAt --jq '.publishedAt')
-    
+
     if [ -n "$RELEASE_DATE" ]; then
         PRS=$(gh pr list --state merged --json number,title,mergedAt | jq -r --arg date "$RELEASE_DATE" '
             map(select(.mergedAt > $date)) | 
