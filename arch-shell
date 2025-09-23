@@ -126,7 +126,7 @@ usage() {
     echo "  run <env> <command> Exécuter une commande dans un environnement"
     echo "  clean <env>         Nettoyer un environnement"
     echo "  snapshot <env>      Gérer les snapshots d'un environnement"
-    echo "  cache --stats       Interagir avec le cache partagé"
+    echo "  cache <flag>       Interagir avec le cache partagé"
     exit 1
 }
 
