@@ -14,6 +14,7 @@ NO_COLOR=false
 YES=false
 QUIET=false
 ARCHSHELL_DIR="${HOME}/.arch-shell"
+ARCHSHELL_ENVS="${ARCHSHELL_DIR}/envs"
 ARCHSHELL_STORE="${ARCHSHELL_DIR}/store"
 BASE_TEMPLATE="${ARCHSHELL_STORE}/base-template"
 SHARED_CACHE="${ARCHSHELL_DIR}/cache"
@@ -158,11 +159,11 @@ usage_snapshot() {
     echo "  --delete <snap>     Supprimer un snapshot (par nom)"
     echo ""
     echo "Exemples:"
-    echo "  $0 snapshot mon-env                          Créer un snapshot avec nom automatique"
+    echo "  $0 snapshot mon-env                        Créer un snapshot avec nom automatique"
     echo "  $0 snapshot mon-env \"avant-test\"           Créer un snapshot nommé"
-    echo "  $0 snapshot mon-env --list                   Lister les snapshots"
+    echo "  $0 snapshot mon-env --list                 Lister les snapshots"
     echo "  $0 snapshot mon-env --restore \"avant-test\" Restaurer par nom"
-    echo "  $0 snapshot mon-env --restore 1              Restaurer par numéro"
+    echo "  $0 snapshot mon-env --restore 1            Restaurer par numéro"
     echo "  $0 snapshot mon-env --delete \"avant-test\"  Supprimer un snapshot"
     exit 1
 }
@@ -278,7 +279,7 @@ show_cache_stats() {
 
 update_env_info() {
     local envname="$1"
-    local envdir="${ARCHSHELL_DIR}/${envname}"
+    local envdir="${ARCHSHELL_ENVS}/${envname}"
     local infofile="${envdir}/.arch-shell-env"
     
     cat > "$infofile" << EOF
@@ -294,7 +295,7 @@ EOF
 
 update_last_used() {
     local envname="$1"
-    local infofile="${ARCHSHELL_DIR}/${envname}/.arch-shell-env"
+    local infofile="${ARCHSHELL_ENVS}/${envname}/.arch-shell-env"
     if [ -f "$infofile" ]; then
         if command -v jq >/dev/null 2>&1; then
             jq ".last_used = \"$(date -Iseconds)\"" "$infofile" > "${infofile}.tmp" && mv "${infofile}.tmp" "$infofile"
@@ -307,7 +308,7 @@ update_last_used() {
 add_package() {
     local envname="$1"
     local package="$2"
-    local infofile="${ARCHSHELL_DIR}/${envname}/.arch-shell-env"
+    local infofile="${ARCHSHELL_ENVS}/${envname}/.arch-shell-env"
     
     if [ -f "$infofile" ]; then
         if command -v jq >/dev/null 2>&1; then
@@ -321,7 +322,7 @@ add_package() {
 remove_package() {
     local envname="$1"
     local package="$2"
-    local infofile="${ARCHSHELL_DIR}/${envname}/.arch-shell-env"
+    local infofile="${ARCHSHELL_ENVS}/${envname}/.arch-shell-env"
     
     if [ -f "$infofile" ]; then
         if command -v jq >/dev/null 2>&1; then
@@ -335,7 +336,7 @@ remove_package() {
 check_package_in_env() {
     local envname="$1"
     local package="$2"
-    local infofile="${ARCHSHELL_DIR}/${envname}/.arch-shell-env"
+    local infofile="${ARCHSHELL_ENVS}/${envname}/.arch-shell-env"
     
     if [ -f "$infofile" ]; then
         if command -v jq >/dev/null 2>&1; then
@@ -351,7 +352,7 @@ check_package_in_env() {
 export_env() {
     local envname="$1"
     local export_file="$2"
-    local envdir="${ARCHSHELL_DIR}/${envname}"
+    local envdir="${ARCHSHELL_ENVS}/${envname}"
     local infofile="${envdir}/.arch-shell-env"
     
     if [ ! -d "$envdir" ]; then
@@ -426,7 +427,7 @@ EOF
 import_env() {
     local import_file="$1"
     local envname="$2"
-    local envdir="${ARCHSHELL_DIR}/${envname}"
+    local envdir="${ARCHSHELL_ENVS}/${envname}"
     
     if [ ! -f "$import_file" ]; then
         echo -e "${RED}[!] Fichier d'import inexistant : ${import_file}${NC}"
@@ -553,7 +554,7 @@ clean_env() {
     
     clean_single_env() {
         local env="$1"
-        local envdir="${ARCHSHELL_DIR}/${env}"
+        local envdir="${ARCHSHELL_ENVS}/${env}"
         
         if [ ! -d "$envdir" ]; then
             echo -e "${RED}[!] Environnement inexistant : ${env}${NC}"
@@ -626,7 +627,7 @@ clean_env() {
     if [ "$all_envs" = true ]; then
         echo -e "${BLUE}[*] Nettoyage de tous les environnements...${NC}"
         local env_count=0
-        for env_path in "$ARCHSHELL_DIR"/*; do
+        for env_path in "${ARCHSHELL_ENVS}"/*; do
             [ -d "$env_path" ] || continue
             local env_basename=$(basename "$env_path")
             [ "$env_basename" = "store" ] && continue
@@ -679,7 +680,7 @@ run_command() {
         esac
     done
     
-    local envdir="${ARCHSHELL_DIR}/${envname}"
+    local envdir="${ARCHSHELL_ENVS}/${envname}"
     
     if [ ! -d "$envdir" ]; then
         echo -e "${RED}[!] Environnement inexistant : ${envname}${NC}"
@@ -744,7 +745,7 @@ SNAPSHOTS_DIR="${ARCHSHELL_DIR}/snapshots"
 create_snapshot() {
     local envname="$1"
     local snapshot_name="$2"
-    local envdir="${ARCHSHELL_DIR}/${envname}"
+    local envdir="${ARCHSHELL_ENVS}/${envname}"
     local env_snapshots_dir="${SNAPSHOTS_DIR}/${envname}"
     
     if [ ! -d "$envdir" ]; then
@@ -768,7 +769,7 @@ create_snapshot() {
     echo -e "${BLUE}[*] Création du snapshot '${snapshot_name}' pour ${envname}...${NC}"
     
     (
-        cd "${ARCHSHELL_DIR}" && \
+        cd "${ARCHSHELL_ENVS}" && \
         debug_run "tar --zstd -cf '$snapshot_file' '${envname}'"
     ) &
     spinner $! "Création du snapshot"
@@ -794,7 +795,7 @@ list_snapshots() {
     local envname="$1"
     local env_snapshots_dir="${SNAPSHOTS_DIR}/${envname}"
     
-    if [ ! -d "${ARCHSHELL_DIR}/${envname}" ]; then
+    if [ ! -d "${ARCHSHELL_ENVS}/${envname}" ]; then
         echo -e "${RED}[!] Environnement inexistant : ${envname}${NC}"
         exit 3
     fi
@@ -829,7 +830,7 @@ list_snapshots() {
 restore_snapshot() {
     local envname="$1"
     local snapshot_name="$2"
-    local envdir="${ARCHSHELL_DIR}/${envname}"
+    local envdir="${ARCHSHELL_ENVS}/${envname}"
     local env_snapshots_dir="${SNAPSHOTS_DIR}/${envname}"
     
     if [ ! -d "$envdir" ]; then
@@ -874,7 +875,7 @@ restore_snapshot() {
     mv "$envdir" "${envdir}.${backup_name}"
     
     (
-        cd "${ARCHSHELL_DIR}" && \
+        cd "${ARCHSHELL_ENVS}" && \
         if [[ "$snapshot_file" == *.tar.zst ]]; then
             debug_run "tar --zstd -xf '$snapshot_file'"
         else
@@ -903,7 +904,7 @@ delete_snapshot() {
     local env_snapshots_dir="${SNAPSHOTS_DIR}/${envname}"
     local snapshot_file="${env_snapshots_dir}/${snapshot_name}.tar.zst"
     
-    if [ ! -d "${ARCHSHELL_DIR}/${envname}" ]; then
+    if [ ! -d "${ARCHSHELL_ENVS}/${envname}" ]; then
         echo -e "${RED}[!] Environnement inexistant : ${envname}${NC}"
         exit 3
     fi
@@ -999,17 +1000,17 @@ case "$1" in
       echo "Template de base introuvable. Exécutez d'abord '$0 init'."
       exit 2
     fi
-    if [ -d "${ARCHSHELL_DIR}/${ENVNAME}" ]; then
+    if [ -d "${ARCHSHELL_ENVS}/${ENVNAME}" ]; then
       echo "L'environnement ${ENVNAME} existe déjà."; exit 5;
     fi
     echo -e "${BLUE}[*] Création de l'environnement $ENVNAME à partir du template...${NC}"
-    mkdir -p "${ARCHSHELL_DIR}/${ENVNAME}"
+    mkdir -p "${ARCHSHELL_ENVS}/${ENVNAME}"
     total=$(sudo du -sb "$BASE_TEMPLATE" | awk '{print $1}')
     (
-      debug_run "sudo rsync -a --info=progress2 '$BASE_TEMPLATE/' '${ARCHSHELL_DIR}/${ENVNAME}/'"
+      debug_run "sudo rsync -a --info=progress2 '$BASE_TEMPLATE/' '${ARCHSHELL_ENVS}/${ENVNAME}/'"
     ) &
     spinner $! "Copie du template"
-    sudo chown -R $USER: "${ARCHSHELL_DIR}/${ENVNAME}"
+    sudo chown -R $USER: "${ARCHSHELL_ENVS}/${ENVNAME}"
     update_env_info "$ENVNAME"
     echo -e "${GREEN}[*] Environnement $ENVNAME créé.${NC}"
     ;;
@@ -1020,7 +1021,7 @@ case "$1" in
     fi
     ENVNAME="$2"
     shift 2
-    if [ ! -d "${ARCHSHELL_DIR}/${ENVNAME}" ]; then
+    if [ ! -d "${ARCHSHELL_ENVS}/${ENVNAME}" ]; then
       echo "Environnement inexistant : ${ENVNAME}"; exit 3;
     fi
     init_shared_cache
@@ -1035,7 +1036,7 @@ case "$1" in
     
     echo -e "${BLUE}[*] Installation de(s) paquet(s) $* dans $ENVNAME...${NC}"
     (
-      debug_run "sudo arch-nspawn -c '$SHARED_CACHE/pkg' '${ARCHSHELL_DIR}/${ENVNAME}' pacman -S --noconfirm $*"
+      debug_run "sudo arch-nspawn -c '$SHARED_CACHE/pkg' '${ARCHSHELL_ENVS}/${ENVNAME}' pacman -S --noconfirm $*"
     ) &
     install_pid=$!
     spinner $install_pid "Installation des paquets"
@@ -1064,7 +1065,7 @@ case "$1" in
     fi
     ENVNAME="$2"
     shift 2
-    if [ ! -d "${ARCHSHELL_DIR}/${ENVNAME}" ]; then
+    if [ ! -d "${ARCHSHELL_ENVS}/${ENVNAME}" ]; then
       echo "Environnement inexistant : ${ENVNAME}"; exit 3;
     fi
     init_shared_cache
@@ -1087,7 +1088,7 @@ case "$1" in
     
     echo -e "${BLUE}[*] Suppression de(s) paquet(s) $* dans $ENVNAME...${NC}"
     (
-      debug_run "sudo arch-nspawn -c '$SHARED_CACHE/pkg' '${ARCHSHELL_DIR}/${ENVNAME}' pacman -R --noconfirm $*"
+      debug_run "sudo arch-nspawn -c '$SHARED_CACHE/pkg' '${ARCHSHELL_ENVS}/${ENVNAME}' pacman -R --noconfirm $*"
     ) &
     remove_pid=$!
     spinner $remove_pid "Suppression des paquets"
@@ -1111,13 +1112,13 @@ case "$1" in
       exit 1
     fi
     ENVNAME="$2"
-    if [ ! -d "${ARCHSHELL_DIR}/${ENVNAME}" ]; then
+    if [ ! -d "${ARCHSHELL_ENVS}/${ENVNAME}" ]; then
       echo "Environnement inexistant : ${ENVNAME}"; exit 3;
     fi
     init_shared_cache
     echo "Entrée dans l'environnement $ENVNAME."
     update_last_used "$ENVNAME"
-    sudo arch-nspawn -c "$SHARED_CACHE/pkg" "${ARCHSHELL_DIR}/${ENVNAME}"
+    sudo arch-nspawn -c "$SHARED_CACHE/pkg" "${ARCHSHELL_ENVS}/${ENVNAME}"
     ;;
   delete)
     if [ $# -lt 2 ]; then
@@ -1125,12 +1126,12 @@ case "$1" in
       exit 1
     fi
     ENVNAME="$2"
-    if [ ! -d "${ARCHSHELL_DIR}/${ENVNAME}" ]; then
+    if [ ! -d "${ARCHSHELL_ENVS}/${ENVNAME}" ]; then
       echo "Environnement inexistant : ${ENVNAME}"; exit 3;
     fi
     if ask_confirmation "Supprimer définitivement ${ENVNAME} ? [o/N] "; then
-      sudo rm -rf "${ARCHSHELL_DIR}/${ENVNAME}"
-      LOCKFILE="${ARCHSHELL_DIR}/${ENVNAME}.lock"
+      sudo rm -rf "${ARCHSHELL_ENVS}/${ENVNAME}"
+      LOCKFILE="${ARCHSHELL_ENVS}/${ENVNAME}.lock"
       if [ -f "$LOCKFILE" ]; then
         sudo rm -f "$LOCKFILE"
       fi
@@ -1141,7 +1142,7 @@ case "$1" in
     ;;
   list)
     echo "Environnements disponibles :"
-    for env in "$ARCHSHELL_DIR"/*; do
+    for env in "$ARCHSHELL_ENVS"/*; do
       [ -d "$env" ] || continue
       [ "$(basename "$env")" = "store" ] && continue
       if [ -f "$env/.arch-shell-env" ]; then
@@ -1155,7 +1156,7 @@ case "$1" in
       exit 1
     fi
     ENVNAME="$2"
-    INFOFILE="${ARCHSHELL_DIR}/${ENVNAME}/.arch-shell-env"
+    INFOFILE="${ARCHSHELL_ENVS}/${ENVNAME}/.arch-shell-env"
     if [ ! -f "$INFOFILE" ]; then
       echo "Environnement inexistant : ${ENVNAME}"; exit 3;
     fi
