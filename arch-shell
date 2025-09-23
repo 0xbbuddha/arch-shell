@@ -191,6 +191,18 @@ usage_clean() {
     exit 1
 }
 
+usage_cache() {
+    echo "Usage: $0 clean [options]"
+    echo ""
+    echo "Permet de gérer le cache partagé arch-shell."
+    echo ""
+    echo "Options:"
+    echo "  --stats             Afficher les statistiques du cache"
+    echo "  --list              Lister les paquets dans le cache"
+    echo "  --clean             Nettoyer le cache"
+    exit 1
+}
+
 init_shared_cache() {
     debug_log "Initialisation du cache partagé dans $SHARED_CACHE"
     mkdir -p "$SHARED_CACHE/pkg"
@@ -1233,10 +1245,45 @@ case "$1" in
     fi
     ;;
   cache)
+    if [ $# -lt 2 ]; then
+      usage_cache
+    fi
     case "${2:-}" in
       --stats)
         init_shared_cache
         show_cache_stats
+        ;;
+      --list)
+        init_shared_cache
+        echo -e "${BLUE}[*] Paquets dans le cache partagé :${NC}"
+        if [ ! -d "$SHARED_CACHE/pkg" ] || [ -z "$(ls -A "$SHARED_CACHE/pkg" 2>/dev/null)" ]; then
+          echo -e "${YELLOW}[*] Aucun paquet dans le cache${NC}"
+        else
+          total_count=0
+          total_size=0
+          declare -A seen_packages
+          
+          for pkg in "$SHARED_CACHE/pkg"/*.pkg.tar.*; do
+            [ -f "$pkg" ] || continue
+            pkg_name=$(basename "$pkg")
+            
+            [[ "$pkg_name" == *.sig ]] && continue
+            
+            pkg_clean=$(echo "$pkg_name" | sed 's/\.pkg\.tar\..*//')
+            
+            [ "${seen_packages[$pkg_clean]:-}" ] && continue
+            seen_packages[$pkg_clean]=1
+            
+            pkg_size=$(stat -c%s "$pkg" 2>/dev/null || echo "0")
+            
+            echo -e "  ${GREEN}•${NC} $pkg_clean ($(numfmt --to=iec $pkg_size))"
+            total_count=$((total_count + 1))
+            total_size=$((total_size + pkg_size))
+          done
+          
+          echo ""
+          echo -e "${BLUE}[*] Total : ${total_count} paquets ($(numfmt --to=iec $total_size))${NC}"
+        fi
         ;;
       --clean)
         init_shared_cache
@@ -1256,7 +1303,6 @@ case "$1" in
         update_cache_stats
         ;;
       *)
-        echo "Usage: $0 cache --stats|--clean [jours]"
         exit 1
         ;;
     esac
