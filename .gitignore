@@ -37,3 +37,7 @@ test-env/
 # Fichiers de configuration locale
 config.local
 .env.local
+
+
+#Ignore cursor AI rules
+.cursor/rules/codacy.mdc
