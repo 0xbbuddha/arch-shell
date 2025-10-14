@@ -127,6 +127,7 @@ usage() {
     echo "  clean <env>         Clean an environment"
     echo "  snapshot <env>      Manage environment snapshots"
     echo "  cache <options>     Interact with shared cache"
+    echo "  copy <src> <dest>   Copy files between local and environment"
     exit 1
 }
 
@@ -200,6 +201,26 @@ usage_cache() {
     echo "  --stats             Show cache statistics"
     echo "  --list              List packages in cache"
     echo "  --clean             Clean cache"
+    exit 1
+}
+
+usage_copy() {
+    echo "Usage: $0 copy <source> <destination>"
+    echo ""
+    echo "Copy files between local system and environment."
+    echo ""
+    echo "Syntax:"
+    echo "  <env>:<path>        File or directory in environment"
+    echo "  <path>              File or directory on local system"
+    echo ""
+    echo "Options:"
+    echo "  -r, --recursive     Copy directories recursively"
+    echo ""
+    echo "Examples:"
+    echo "  $0 copy my-env:/etc/hosts ./hosts           Copy from env to local"
+    echo "  $0 copy ./script.sh my-env:/root/script.sh  Copy from local to env"
+    echo "  $0 copy -r ./mydir my-env:/root/mydir       Copy directory to env"
+    echo "  $0 copy -r my-env:/var/log ./logs           Copy directory from env"
     exit 1
 }
 
@@ -940,6 +961,149 @@ delete_snapshot() {
     fi
 }
 
+copy_file() {
+    local recursive=false
+    local src=""
+    local dest=""
+    
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -r|--recursive)
+                recursive=true
+                shift
+                ;;
+            *)
+                if [ -z "$src" ]; then
+                    src="$1"
+                elif [ -z "$dest" ]; then
+                    dest="$1"
+                else
+                    echo -e "${RED}[!] Too many arguments${NC}"
+                    usage_copy
+                fi
+                shift
+                ;;
+        esac
+    done
+    
+    if [ -z "$src" ] || [ -z "$dest" ]; then
+        echo -e "${RED}[!] Source and destination required${NC}"
+        usage_copy
+    fi
+    
+    local src_env=""
+    local src_path=""
+    local dest_env=""
+    local dest_path=""
+    
+    if [[ "$src" =~ ^([^:]+):(.+)$ ]]; then
+        src_env="${BASH_REMATCH[1]}"
+        src_path="${BASH_REMATCH[2]}"
+    else
+        src_path="$src"
+    fi
+    
+    if [[ "$dest" =~ ^([^:]+):(.+)$ ]]; then
+        dest_env="${BASH_REMATCH[1]}"
+        dest_path="${BASH_REMATCH[2]}"
+    else
+        dest_path="$dest"
+    fi
+    
+    if [ -n "$src_env" ] && [ -n "$dest_env" ]; then
+        echo -e "${RED}[!] Cannot copy directly between two environments${NC}"
+        echo -e "${YELLOW}[?] Copy from env to local first, then from local to env${NC}"
+        exit 1
+    fi
+    
+    if [ -z "$src_env" ] && [ -z "$dest_env" ]; then
+        echo -e "${RED}[!] At least one path must reference an environment (env:path)${NC}"
+        usage_copy
+    fi
+    
+    local envname=""
+    local envdir=""
+    
+    if [ -n "$src_env" ]; then
+        envname="$src_env"
+        envdir="${ARCHSHELL_ENVS}/${envname}"
+        
+        if [ ! -d "$envdir" ]; then
+            echo -e "${RED}[!] Environment not found: ${envname}${NC}"
+            exit 3
+        fi
+        
+        local full_src_path="${envdir}${src_path}"
+        
+        if [ ! -e "$full_src_path" ]; then
+            echo -e "${RED}[!] Source file not found in environment: ${src_path}${NC}"
+            exit 1
+        fi
+        
+        if [ -d "$full_src_path" ] && [ "$recursive" = false ]; then
+            echo -e "${RED}[!] Source is a directory. Use -r or --recursive${NC}"
+            exit 1
+        fi
+        
+        echo -e "${BLUE}[*] Copying from environment ${envname}:${src_path} to ${dest_path}...${NC}"
+        
+        if [ "$recursive" = true ]; then
+            debug_run "sudo cp -r '$full_src_path' '$dest_path'"
+        else
+            debug_run "sudo cp '$full_src_path' '$dest_path'"
+        fi
+        
+        if [ $? -eq 0 ]; then
+            debug_run "sudo chown -R $USER: '$dest_path'"
+            echo -e "${GREEN}[*] Copy completed successfully${NC}"
+            update_last_used "$envname"
+        else
+            echo -e "${RED}[!] Copy failed${NC}"
+            exit 1
+        fi
+        
+    elif [ -n "$dest_env" ]; then
+        envname="$dest_env"
+        envdir="${ARCHSHELL_ENVS}/${envname}"
+        
+        if [ ! -d "$envdir" ]; then
+            echo -e "${RED}[!] Environment not found: ${envname}${NC}"
+            exit 3
+        fi
+        
+        if [ ! -e "$src_path" ]; then
+            echo -e "${RED}[!] Source file not found: ${src_path}${NC}"
+            exit 1
+        fi
+        
+        if [ -d "$src_path" ] && [ "$recursive" = false ]; then
+            echo -e "${RED}[!] Source is a directory. Use -r or --recursive${NC}"
+            exit 1
+        fi
+        
+        local full_dest_path="${envdir}${dest_path}"
+        local dest_parent_dir=$(dirname "$full_dest_path")
+        
+        echo -e "${BLUE}[*] Copying from ${src_path} to environment ${envname}:${dest_path}...${NC}"
+        
+        debug_run "sudo mkdir -p '$dest_parent_dir'"
+        
+        if [ "$recursive" = true ]; then
+            debug_run "sudo cp -r '$src_path' '$full_dest_path'"
+        else
+            debug_run "sudo cp '$src_path' '$full_dest_path'"
+        fi
+        
+        if [ $? -eq 0 ]; then
+            echo -e "${GREEN}[*] Copy completed successfully${NC}"
+            update_last_used "$envname"
+        else
+            echo -e "${RED}[!] Copy failed${NC}"
+            exit 1
+        fi
+    fi
+}
+
 while [ $# -gt 0 ]; do
     case "$1" in
         --debug)
@@ -1306,6 +1470,13 @@ case "$1" in
         exit 1
         ;;
     esac
+    ;;
+  copy)
+    if [ $# -lt 3 ]; then
+      usage_copy
+    fi
+    shift 1
+    copy_file "$@"
     ;;
   *)
     usage
